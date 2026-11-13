@@ -33,11 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinitecanvas.board.R
 import com.infinitecanvas.board.domain.model.BrushType
+import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.presentation.canvas.InfiniteCanvasView
 import kotlin.math.roundToInt
 
 /**
- * Основной экран бесконечной доски с адаптивными панелями инструментов под планшет.
+ * Основной экран бесконечной доски с плавающей панелью 3 кистей, ластика и Undo.
  */
 @Composable
 fun BoardScreen(
@@ -45,19 +46,23 @@ fun BoardScreen(
 ) {
     val viewportState by viewModel.viewportState.collectAsState()
     val strokes by viewModel.strokes.collectAsState()
+    val activeTool by viewModel.activeTool.collectAsState()
     val activeBrush by viewModel.activeBrush.collectAsState()
+    val canUndo by viewModel.canUndo.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         InfiniteCanvasView(
             viewportState = viewportState,
             strokes = strokes,
+            activeTool = activeTool,
             activeBrush = activeBrush,
-            allowFingerDrawing = false, // Только S Pen рисует; пальцы — пан/зум
+            allowFingerDrawing = false,
             onStrokeCommitted = viewModel::onStrokeCommitted,
+            onEraseStrokes = viewModel::eraseStrokesByIds,
             onTransform = viewModel::onTransform
         )
 
-        // Левая плавающая панель пресетов кистей + Undo (удобно под левую руку на 10.9" экране)
+        // Левая плавающая панель инструментов (3 кисти + Ластик + Undo)
         Surface(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -73,19 +78,19 @@ fun BoardScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 FilterChip(
-                    selected = activeBrush.type == BrushType.BALLPOINT,
+                    selected = activeTool == CanvasTool.BRUSH && activeBrush.type == BrushType.BALLPOINT,
                     onClick = { viewModel.selectBrushType(BrushType.BALLPOINT) },
                     modifier = Modifier.defaultMinSize(minWidth = 96.dp, minHeight = 48.dp),
                     label = { Text(stringResource(R.string.brush_ballpoint)) }
                 )
                 FilterChip(
-                    selected = activeBrush.type == BrushType.FOUNTAIN,
+                    selected = activeTool == CanvasTool.BRUSH && activeBrush.type == BrushType.FOUNTAIN,
                     onClick = { viewModel.selectBrushType(BrushType.FOUNTAIN) },
                     modifier = Modifier.defaultMinSize(minWidth = 96.dp, minHeight = 48.dp),
                     label = { Text(stringResource(R.string.brush_fountain)) }
                 )
                 FilterChip(
-                    selected = activeBrush.type == BrushType.PENCIL,
+                    selected = activeTool == CanvasTool.BRUSH && activeBrush.type == BrushType.PENCIL,
                     onClick = { viewModel.selectBrushType(BrushType.PENCIL) },
                     modifier = Modifier.defaultMinSize(minWidth = 96.dp, minHeight = 48.dp),
                     label = { Text(stringResource(R.string.brush_pencil)) }
@@ -93,9 +98,16 @@ fun BoardScreen(
 
                 HorizontalDivider(modifier = Modifier.width(72.dp))
 
+                FilterChip(
+                    selected = activeTool == CanvasTool.ERASER,
+                    onClick = { viewModel.selectEraser() },
+                    modifier = Modifier.defaultMinSize(minWidth = 96.dp, minHeight = 48.dp),
+                    label = { Text(stringResource(R.string.tool_eraser)) }
+                )
+
                 IconButton(
-                    onClick = { viewModel.undoLastStroke() },
-                    enabled = strokes.isNotEmpty(),
+                    onClick = { viewModel.undo() },
+                    enabled = canUndo,
                     modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
                     Icon(

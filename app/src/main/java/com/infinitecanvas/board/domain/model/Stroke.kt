@@ -3,35 +3,63 @@ package com.infinitecanvas.board.domain.model
 import kotlin.math.max
 import kotlin.math.min
 
-
-//Отдельная точка штриха в мировых координатах доски.
+/**
+ * Отдельная точка штриха в мировых координатах доски.
+ *
+ * @property x Мировая координата X.
+ * @property y Мировая координата Y.
+ * @property pressure Нормализованная сила нажатия стилуса (0.0f..1.0f).
+ */
 data class StrokePoint(
     val x: Double,
     val y: Double,
     val pressure: Float
 )
 
-
- //Ограничивающий прямоугольник штриха в мировых координатах (для viewport culling).
+/**
+ * Ограничивающий прямоугольник в мировых координатах (для Quadtree и viewport culling).
+ */
 data class WorldBounds(
     val minX: Double,
     val minY: Double,
     val maxX: Double,
     val maxY: Double
 ) {
+    val width: Double get() = maxX - minX
+    val height: Double get() = maxY - minY
+    val centerX: Double get() = (minX + maxX) * 0.5
+    val centerY: Double get() = (minY + maxY) * 0.5
 
-    //Проверяет пересечение с видимой областью экрана.
+    /**
+     * Проверяет пересечение с видимой областью или другим прямоугольником.
+     */
     fun intersects(left: Double, top: Double, right: Double, bottom: Double): Boolean {
         return maxX >= left && minX <= right && maxY >= top && minY <= bottom
+    }
+
+    fun intersects(other: WorldBounds): Boolean {
+        return intersects(other.minX, other.minY, other.maxX, other.maxY)
+    }
+
+    fun contains(other: WorldBounds): Boolean {
+        return other.minX >= minX && other.maxX <= maxX &&
+                other.minY >= minY && other.maxY <= maxY
+    }
+
+    companion object {
+        fun fromCenter(cx: Double, cy: Double, radius: Double): WorldBounds {
+            return WorldBounds(
+                minX = cx - radius,
+                minY = cy - radius,
+                maxX = cx + radius,
+                maxY = cy + radius
+            )
+        }
     }
 }
 
 /**
- Завершённый векторный штрих на бесконечном холсте.
- @property id Уникальный идентификатор штриха.
- @property points Упорядоченный список точек в мировых координатах.
- @property brush Параметры кисти, которой был нанесён штрих.
- @property bounds Предвычисленный bounding box с учётом толщины кисти.
+ * Завершённый векторный штрих на бесконечном холсте.
  */
 data class Stroke(
     val id: Long,
@@ -40,8 +68,9 @@ data class Stroke(
     val bounds: WorldBounds
 ) {
     companion object {
-
-        //Создаёт штрих и автоматически вычисляет его мировые границы для быстрого отсечения
+        /**
+         * Создаёт штрих и автоматически вычисляет его мировые границы.
+         */
         fun create(id: Long, points: List<StrokePoint>, brush: Brush): Stroke {
             val padding = (brush.baseSize * 2.5).coerceAtLeast(4.0)
             var minX = Double.POSITIVE_INFINITY

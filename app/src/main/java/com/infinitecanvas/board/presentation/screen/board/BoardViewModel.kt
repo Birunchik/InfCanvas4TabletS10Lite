@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
+import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +14,8 @@ import kotlinx.coroutines.flow.update
 
 /**
  * ViewModel экрана бесконечной доски.
- * Управляет положением камеры, списком векторных штрихов, выбором кисти и отменой действий.
+ * Управляет положением камеры, списком векторных штрихов, инструментами (кисти/ластик)
+ * и историей отмены (Undo) для рисования и стирания.
  */
 class BoardViewModel(
     private val savedStateHandle: SavedStateHandle
@@ -23,6 +25,7 @@ class BoardViewModel(
         private const val KEY_OFFSET_X = "viewport_offset_x"
         private const val KEY_OFFSET_Y = "viewport_offset_y"
         private const val KEY_SCALE = "viewport_scale"
+        private const val MAX_HISTORY_STEPS = 50
     }
 
     private val _viewportState = MutableStateFlow(
@@ -37,6 +40,9 @@ class BoardViewModel(
     private val _strokes = MutableStateFlow<List<Stroke>>(emptyList())
     val strokes: StateFlow<List<Stroke>> = _strokes.asStateFlow()
 
+    private val _activeTool = MutableStateFlow(CanvasTool.BRUSH)
+    val activeTool: StateFlow<CanvasTool> = _activeTool.asStateFlow()
+
     private val _activeBrush = MutableStateFlow(
         Brush(
             type = BrushType.FOUNTAIN,
@@ -47,9 +53,12 @@ class BoardViewModel(
     )
     val activeBrush: StateFlow<Brush> = _activeBrush.asStateFlow()
 
-    /**
-     * Обновляет позицию и масштаб холста относительно фокуса жеста.
-     */
+    // Стек предыдущих состояний списка штрихов для Undo (поддерживает отмену и рисования, и стирания)
+    private val undoStack = ArrayDeque<List<Stroke>>()
+
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+
     fun onTransform(
         panDeltaX: Float,
         panDeltaY: Float,
@@ -58,8 +67,6 @@ class BoardViewModel(
         centroidY: Float
     ) {
         _viewportState.update { current ->
-            // Было: current.clampScale(...)
-            // Стало (вызов метода companion object):
             val newScale = ViewportState.clampScale(current.scale * zoomFactor)
             val actualZoom = newScale / current.scale
 
@@ -78,9 +85,6 @@ class BoardViewModel(
         }
     }
 
-    /**
-     * Сбрасывает масштаб на 100% и возвращает камеру в (0, 0).
-     */
     fun resetViewport() {
         _viewportState.update {
             savedStateHandle[KEY_OFFSET_X] = 0.0
@@ -90,26 +94,44 @@ class BoardViewModel(
         }
     }
 
-    /**
-     * Добавляет завершённый штрих в историю доски.
-     */
     fun onStrokeCommitted(stroke: Stroke) {
+        pushUndoSnapshot(_strokes.value)
         _strokes.update { currentList -> currentList + stroke }
     }
 
     /**
-     * Переключает активный пресет кисти.
+     * Удаляет штрихи с указанными ID при попадании ластика и записывает шаг в историю Undo.
      */
+    fun eraseStrokesByIds(idsToErase: Set<Long>) {
+        if (idsToErase.isEmpty()) return
+        val currentList = _strokes.value
+        val filtered = currentList.filterNot { it.id in idsToErase }
+        if (filtered.size != currentList.size) {
+            pushUndoSnapshot(currentList)
+            _strokes.value = filtered
+        }
+    }
+
     fun selectBrushType(type: BrushType) {
+        _activeTool.value = CanvasTool.BRUSH
         _activeBrush.update { it.copy(type = type) }
     }
 
-    /**
-     * Отменяет последний нарисованный штрих (Undo).
-     */
-    fun undoLastStroke() {
-        _strokes.update { currentList ->
-            if (currentList.isNotEmpty()) currentList.dropLast(1) else currentList
+    fun selectEraser() {
+        _activeTool.value = CanvasTool.ERASER
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        _strokes.value = undoStack.removeLast()
+        _canUndo.value = undoStack.isNotEmpty()
+    }
+
+    private fun pushUndoSnapshot(snapshot: List<Stroke>) {
+        if (undoStack.size >= MAX_HISTORY_STEPS) {
+            undoStack.removeFirst()
         }
+        undoStack.addLast(snapshot)
+        _canUndo.value = true
     }
 }

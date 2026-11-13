@@ -1,9 +1,10 @@
 <resources>
-    <string name="app_name">InfCanvas</string>
+    <string name="app_name">Porno</string>
     <string name="brush_ballpoint">Ручка</string>
     <string name="brush_fountain">Перо</string>
     <string name="brush_pencil">Карандаш</string>
-    <string name="action_undo">Отменить штрих</string>
+    <string name="tool_eraser">Ластик</string>
+    <string name="action_undo">Отменить</string>
     <string name="action_clear">Очистить</string>
     <string name="action_reset_zoom">100%</string>
     <string name="hud_status_format">Зум: %1$d%% | Штрихов: %2$d</string>

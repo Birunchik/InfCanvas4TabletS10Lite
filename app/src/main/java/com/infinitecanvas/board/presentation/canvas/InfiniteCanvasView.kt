@@ -1,5 +1,6 @@
 package com.infinitecanvas.board.presentation.canvas
 
+import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -25,25 +27,38 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
+import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.ViewportState
+import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.spatial.Quadtree
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.hypot
 
+/**
+ * Бесконечный холст с пространственным индексом Quadtree, кэшем геометрии штрихов
+ * и надёжной поддержкой боковой кнопки S Pen (BUTTON_STYLUS_PRIMARY) для ластика.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun InfiniteCanvasView(
     viewportState: ViewportState,
     strokes: List<Stroke>,
+    activeTool: CanvasTool,
     activeBrush: Brush,
     allowFingerDrawing: Boolean = false,
     onStrokeCommitted: (Stroke) -> Unit,
+    onEraseStrokes: (Set<Long>) -> Unit,
     onTransform: (panX: Float, panY: Float, zoom: Float, centroidX: Float, centroidY: Float) -> Unit,
     modifier: Modifier = Modifier,
     backgroundColor: Color = Color(0xFFF8F9FA),
@@ -51,36 +66,101 @@ fun InfiniteCanvasView(
     majorGridColor: Color = Color(0xFFC4C9D0)
 ) {
     val currentViewport by rememberUpdatedState(viewportState)
+    val currentTool by rememberUpdatedState(activeTool)
     val currentBrush by rememberUpdatedState(activeBrush)
     val currentOnCommit by rememberUpdatedState(onStrokeCommitted)
+    val currentOnErase by rememberUpdatedState(onEraseStrokes)
     val currentOnTransform by rememberUpdatedState(onTransform)
 
+    val quadtree = remember(strokes) { Quadtree.build(strokes) }
+    val currentQuadtree by rememberUpdatedState(quadtree)
+
     val activePoints = remember { mutableStateListOf<StrokePoint>() }
+    var eraserScreenPos by remember { mutableStateOf<Offset?>(null) }
     var activeTick by remember { mutableIntStateOf(0) }
 
-    // Постоянный кэш готовых Path по ID штриха (не зависит от зума и сдвига!)
+    // Аппаратное состояние боковой кнопки S Pen, считанное напрямую из MotionEvent.buttonState
+    var isHardwareStylusButtonHeld by remember { mutableStateOf(false) }
+
     val pathCache = remember { StrokeGeometryCache() }
     val activePath = remember { Path() }
     val minorGridPath = remember { Path() }
     val majorGridPath = remember { Path() }
+    val visibleStrokesBuffer = remember { ArrayList<Stroke>(128) }
 
     Canvas(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundColor)
+            // 1. Считываем аппаратный флаг кнопки S Pen из нативного MotionEvent, не поглощая событие
+            .pointerInteropFilter { motionEvent ->
+                val state = motionEvent.buttonState
+                val pressed = (state and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0 ||
+                        (state and MotionEvent.BUTTON_SECONDARY) != 0
+                if (isHardwareStylusButtonHeld != pressed) {
+                    isHardwareStylusButtonHeld = pressed
+                }
+                false
+            }
+            // 2. Пассивный наблюдатель Hover (показывает предпросмотр ластика до касания экрана)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val stylusChange = event.changes.firstOrNull {
+                            it.type == PointerType.Stylus || it.type == PointerType.Eraser
+                        }
+                        if (stylusChange != null && !stylusChange.pressed) {
+                            val showPreview = isHardwareStylusButtonHeld ||
+                                    event.buttons.isSecondaryPressed ||
+                                    stylusChange.type == PointerType.Eraser ||
+                                    currentTool == CanvasTool.ERASER
+
+                            if (showPreview) {
+                                eraserScreenPos = stylusChange.position
+                                activeTick++
+                            } else if (eraserScreenPos != null) {
+                                eraserScreenPos = null
+                                activeTick++
+                            }
+                        } else if (event.type == PointerEventType.Exit && eraserScreenPos != null) {
+                            eraserScreenPos = null
+                            activeTick++
+                        }
+                    }
+                }
+            }
+            // 3. Основной обработчик касаний S Pen и мультитач-жестов
             .pointerInput(allowFingerDrawing) {
                 awaitEachGesture {
                     val firstDown = awaitFirstDown(requireUnconsumed = false)
-                    val isStylus = firstDown.type == PointerType.Stylus ||
+                    val isStylusOrEraser = firstDown.type == PointerType.Stylus ||
                             firstDown.type == PointerType.Eraser
                     val isSingleFingerAllowed = allowFingerDrawing &&
                             firstDown.type == PointerType.Touch
 
-                    if (isStylus || isSingleFingerAllowed) {
+                    if (isStylusOrEraser || isSingleFingerAllowed) {
                         val pointerId = firstDown.id
+                        val initialEvent = currentEvent
                         firstDown.consume()
-                        activePoints.clear()
-                        appendFilteredPoints(firstDown, currentViewport, activePoints)
+
+                        var isErasingNow = currentTool == CanvasTool.ERASER ||
+                                firstDown.type == PointerType.Eraser ||
+                                isHardwareStylusButtonHeld ||
+                                initialEvent.buttons.isSecondaryPressed
+
+                        if (isErasingNow) {
+                            eraserScreenPos = firstDown.position
+                            eraseAtScreenPosition(
+                                screenPos = firstDown.position,
+                                viewport = currentViewport,
+                                quadtree = currentQuadtree,
+                                onErase = currentOnErase
+                            )
+                        } else {
+                            activePoints.clear()
+                            appendFilteredPoints(firstDown, currentViewport, activePoints)
+                        }
                         activeTick++
 
                         while (true) {
@@ -88,29 +168,63 @@ fun InfiniteCanvasView(
                             val change = event.changes.firstOrNull { it.id == pointerId }
                                 ?: event.changes.firstOrNull()
 
+                            val shouldEraseOnThisEvent = currentTool == CanvasTool.ERASER ||
+                                    change?.type == PointerType.Eraser ||
+                                    isHardwareStylusButtonHeld ||
+                                    event.buttons.isSecondaryPressed
+
                             if (change == null || !change.pressed) {
-                                if (change != null) {
+                                if (!isErasingNow && change != null) {
                                     appendFilteredPoints(change, currentViewport, activePoints)
-                                    change.consume()
                                 }
-                                if (activePoints.isNotEmpty()) {
+                                change?.consume()
+
+                                if (!isErasingNow && activePoints.isNotEmpty()) {
                                     val committed = Stroke.create(
                                         id = System.nanoTime(),
                                         points = activePoints.toList(),
                                         brush = currentBrush
                                     )
-                                    // Сразу прогреваем кэш геометрии для нового штриха
                                     pathCache.getOrBuild(committed)
                                     currentOnCommit(committed)
                                 }
                                 activePoints.clear()
+                                eraserScreenPos = null // Сбрасываем красный круг при отрыве пера!
                                 activeTick++
                                 break
                             } else {
-                                if (appendFilteredPoints(change, currentViewport, activePoints)) {
-                                    activeTick++
+                                if (shouldEraseOnThisEvent && !isErasingNow) {
+                                    if (activePoints.size > 1) {
+                                        val committed = Stroke.create(
+                                            id = System.nanoTime(),
+                                            points = activePoints.toList(),
+                                            brush = currentBrush
+                                        )
+                                        pathCache.getOrBuild(committed)
+                                        currentOnCommit(committed)
+                                    }
+                                    activePoints.clear()
+                                    isErasingNow = true
+                                } else if (!shouldEraseOnThisEvent && isErasingNow) {
+                                    eraserScreenPos = null
+                                    activePoints.clear()
+                                    isErasingNow = false
                                 }
+
+                                if (isErasingNow) {
+                                    eraserScreenPos = change.position
+                                    eraseAtScreenPosition(
+                                        screenPos = change.position,
+                                        viewport = currentViewport,
+                                        quadtree = currentQuadtree,
+                                        onErase = currentOnErase
+                                    )
+                                } else {
+                                    appendFilteredPoints(change, currentViewport, activePoints)
+                                }
+
                                 change.consume()
+                                activeTick++
                             }
                         }
                     } else {
@@ -145,7 +259,6 @@ fun InfiniteCanvasView(
         val worldRight = viewportState.screenToWorldX(canvasWidth)
         val worldBottom = viewportState.screenToWorldY(canvasHeight)
 
-        // 1. Сетка за 2 GPU draw-call'а (один Path для обычных линий, один для главных)
         drawBatchedWorldGrid(
             viewportState = viewportState,
             worldLeft = worldLeft,
@@ -160,7 +273,9 @@ fun InfiniteCanvasView(
             majorGridPath = majorGridPath
         )
 
-        // 2. Отрисовка закоммиченных штрихов из кэша (нулевой пересчёт геометрии при зуме/пане!)
+        val viewportBounds = WorldBounds(worldLeft, worldTop, worldRight, worldBottom)
+        quadtree.query(viewportBounds, visibleStrokesBuffer)
+
         withTransform({
             translate(
                 left = viewportState.offsetX.toFloat(),
@@ -172,26 +287,49 @@ fun InfiniteCanvasView(
                 pivot = Offset.Zero
             )
         }) {
-            for (i in strokes.indices) {
-                val stroke = strokes[i]
-                if (!stroke.bounds.intersects(worldLeft, worldTop, worldRight, worldBottom)) {
-                    continue
-                }
+            for (i in visibleStrokesBuffer.indices) {
+                val stroke = visibleStrokesBuffer[i]
                 val cachedGeometry = pathCache.getOrBuild(stroke)
                 drawCachedGeometry(cachedGeometry)
             }
 
-            // 3. Активный штрих пера
             if (activePoints.isNotEmpty()) {
                 drawDynamicStroke(activePoints, currentBrush, activePath)
             }
         }
+
+        val cursor = eraserScreenPos
+        if (cursor != null) {
+            drawCircle(
+                color = Color(0x33D32F2F),
+                radius = 22f,
+                center = cursor
+            )
+            drawCircle(
+                color = Color(0xFFD32F2F),
+                radius = 22f,
+                center = cursor,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+            )
+        }
     }
 }
 
-/**
- * Предвычисленная геометрия штриха в мировых координатах.
- */
+private fun eraseAtScreenPosition(
+    screenPos: Offset,
+    viewport: ViewportState,
+    quadtree: Quadtree,
+    onErase: (Set<Long>) -> Unit
+) {
+    val worldX = viewport.screenToWorldX(screenPos.x)
+    val worldY = viewport.screenToWorldY(screenPos.y)
+    val worldEraserRadius = 18.0 / viewport.scale.coerceAtLeast(0.15)
+    val hitIds = quadtree.findHitStrokeIds(worldX, worldY, worldEraserRadius)
+    if (hitIds.isNotEmpty()) {
+        onErase(hitIds)
+    }
+}
+
 private class CachedStrokeGeometry(
     val path: Path,
     val color: Color,
@@ -201,16 +339,12 @@ private class CachedStrokeGeometry(
     val singleDotRadius: Float = 0f
 )
 
-/**
- * Кэширует готовые Path по ID штриха. При зуме и сдвиге геометрия не пересчитывается.
- */
 private class StrokeGeometryCache {
     private val cache = HashMap<Long, CachedStrokeGeometry>(256)
 
     fun getOrBuild(stroke: Stroke): CachedStrokeGeometry {
         cache[stroke.id]?.let { return it }
 
-        // Очищаем устаревшие записи, если штрихи были удалены через Undo
         if (cache.size > 2000) {
             cache.clear()
         }
@@ -324,9 +458,6 @@ private fun DrawScope.drawDynamicStroke(
     drawCachedGeometry(geom)
 }
 
-/**
- * Отрисовка фиксированной сетки всего за 2 GPU draw-call'а.
- */
 private fun DrawScope.drawBatchedWorldGrid(
     viewportState: ViewportState,
     worldLeft: Double,

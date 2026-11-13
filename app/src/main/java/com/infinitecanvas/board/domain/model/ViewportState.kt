@@ -2,11 +2,6 @@ package com.infinitecanvas.board.domain.model
 
 import kotlin.math.max
 import kotlin.math.min
-
-/**
- * Состояние камеры (вьюпорта) в мировых координатах.
- * Использует Double для сохранения высокой точности при экстремальном масштабировании (5% - 3200%).
- */
 data class ViewportState(
     val offsetX: Double = 0.0, // Смещение камеры по X в мировых координатах
     val offsetY: Double = 0.0, // Смещение камеры по Y в мировых координатах
@@ -21,15 +16,12 @@ data class ViewportState(
         }
     }
 
-    /**
-     * Перевод экранных координат (px) в мировые координаты доски.
-     */
+    // Перевод экранных координат (px) в мировые координаты доски.
     fun screenToWorldX(screenX: Float): Double = (screenX - offsetX) / scale
     fun screenToWorldY(screenY: Float): Double = (screenY - offsetY) / scale
 
-    /**
-     * Перевод мировых координат в экранные (px).
-     */
+
+    // Перевод мировых координат в экранные (px).
     fun worldToScreenX(worldX: Double): Float = (worldX * scale + offsetX).toFloat()
     fun worldToScreenY(worldY: Double): Float = (worldY * scale + offsetY).toFloat()
 }

@@ -13,8 +13,8 @@ data class ViewportState(
     val scale: Double = 1.0    // Коэффициент масштабирования (1.0 = 100%)
 ) {
     companion object {
-        const val MIN_SCALE = 0.05  // 5%
-        const val MAX_SCALE = 32.0  // 3200%
+        const val MIN_SCALE = 0.15  // 15%
+        const val MAX_SCALE = 1.5  // 150%
 
         fun clampScale(targetScale: Double): Double {
             return min(MAX_SCALE, max(MIN_SCALE, targetScale))

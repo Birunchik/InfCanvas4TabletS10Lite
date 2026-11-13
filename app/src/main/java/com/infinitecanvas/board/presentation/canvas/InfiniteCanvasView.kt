@@ -11,8 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import com.infinitecanvas.board.domain.model.ViewportState
 import kotlin.math.floor
-import kotlin.math.log2
-import kotlin.math.pow
+import kotlin.math.abs
 
 @Composable
 fun InfiniteCanvasView(
@@ -28,7 +27,6 @@ fun InfiniteCanvasView(
             .fillMaxSize()
             .background(backgroundColor)
             .pointerInput(Unit) {
-                // Обработка мультитач-жестов панорамирования и масштабирования
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     onTransform(pan.x, pan.y, zoom, centroid.x, centroid.y)
                 }
@@ -36,15 +34,10 @@ fun InfiniteCanvasView(
     ) {
         val canvasWidth = size.width
         val canvasHeight = size.height
-        val scale = viewportState.scale
 
-        // Базовый шаг сетки в мировых единицах (50px при 100% масштабе)
-        val baseGridStep = 50.0
-
-        // Адаптивный шаг сетки: удваиваем или делим шаг на 2, чтобы на экране ячейки всегда были 25..100dp
-        val scaleExponent = floor(log2(scale)).toInt()
-        val adaptiveStep = baseGridStep / 2.0.pow(scaleExponent.toDouble())
-        val majorStep = adaptiveStep * 5.0
+        // Фиксированный шаг сетки в мировых единицах (не зависит от viewportState.scale)
+        val fixedStep = 50.0
+        val majorStep = fixedStep * 5.0
 
         // Видимые границы мира в мировых координатах
         val worldLeft = viewportState.screenToWorldX(0f)
@@ -53,15 +46,15 @@ fun InfiniteCanvasView(
         val worldBottom = viewportState.screenToWorldY(canvasHeight)
 
         // Первая видимая вертикальная и горизонтальная линии сетки
-        val firstGridX = floor(worldLeft / adaptiveStep) * adaptiveStep
-        val firstGridY = floor(worldTop / adaptiveStep) * adaptiveStep
+        val firstGridX = floor(worldLeft / fixedStep) * fixedStep
+        val firstGridY = floor(worldTop / fixedStep) * fixedStep
 
-        // Отрисовка вертикальных линий (без аллокаций объектов внутри цикла)
+        // Отрисовка вертикальных линий
         var currentX = firstGridX
         while (currentX <= worldRight) {
             val screenX = viewportState.worldToScreenX(currentX)
-            val isMajor = kotlin.math.abs(currentX % majorStep) < (adaptiveStep * 0.01) ||
-                    kotlin.math.abs((currentX % majorStep) - majorStep) < (adaptiveStep * 0.01)
+            val isMajor = abs(currentX % majorStep) < (fixedStep * 0.01) ||
+                    abs((currentX % majorStep) - majorStep) < (fixedStep * 0.01)
 
             drawLine(
                 color = if (isMajor) majorGridColor else gridColor,
@@ -69,15 +62,15 @@ fun InfiniteCanvasView(
                 end = Offset(screenX, canvasHeight),
                 strokeWidth = if (isMajor) 2f else 1f
             )
-            currentX += adaptiveStep
+            currentX += fixedStep
         }
 
         // Отрисовка горизонтальных линий
         var currentY = firstGridY
         while (currentY <= worldBottom) {
             val screenY = viewportState.worldToScreenY(currentY)
-            val isMajor = kotlin.math.abs(currentY % majorStep) < (adaptiveStep * 0.01) ||
-                    kotlin.math.abs((currentY % majorStep) - majorStep) < (adaptiveStep * 0.01)
+            val isMajor = abs(currentY % majorStep) < (fixedStep * 0.01) ||
+                    abs((currentY % majorStep) - majorStep) < (fixedStep * 0.01)
 
             drawLine(
                 color = if (isMajor) majorGridColor else gridColor,
@@ -85,10 +78,10 @@ fun InfiniteCanvasView(
                 end = Offset(canvasWidth, screenY),
                 strokeWidth = if (isMajor) 2f else 1f
             )
-            currentY += adaptiveStep
+            currentY += fixedStep
         }
 
-        // Отрисовка маркера начала мировых координат (0, 0) для ориентира
+        // Отрисовка маркера начала координат (0, 0)
         val originScreenX = viewportState.worldToScreenX(0.0)
         val originScreenY = viewportState.worldToScreenY(0.0)
         if (originScreenX in -50f..(canvasWidth + 50f) && originScreenY in -50f..(canvasHeight + 50f)) {

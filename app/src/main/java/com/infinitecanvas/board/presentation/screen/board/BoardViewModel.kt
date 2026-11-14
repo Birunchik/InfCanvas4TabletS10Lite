@@ -11,11 +11,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.roundToInt
 
 /**
  * ViewModel экрана бесконечной доски.
- * Управляет положением камеры, списком векторных штрихов, инструментами (кисти/ластик)
- * и историей отмены (Undo) для рисования и стирания.
+ * Управляет положением камеры, списком штрихов, инструментами и историей Undo.
  */
 class BoardViewModel(
     private val savedStateHandle: SavedStateHandle
@@ -28,6 +28,7 @@ class BoardViewModel(
         private const val MAX_HISTORY_STEPS = 50
     }
 
+    // Состояние вьюпорта (камеры)
     private val _viewportState = MutableStateFlow(
         ViewportState(
             offsetX = savedStateHandle.get<Double>(KEY_OFFSET_X) ?: 0.0,
@@ -37,9 +38,11 @@ class BoardViewModel(
     )
     val viewportState: StateFlow<ViewportState> = _viewportState.asStateFlow()
 
+    // Штрихи на холсте
     private val _strokes = MutableStateFlow<List<Stroke>>(emptyList())
     val strokes: StateFlow<List<Stroke>> = _strokes.asStateFlow()
 
+    // Активный инструмент и кисть
     private val _activeTool = MutableStateFlow(CanvasTool.BRUSH)
     val activeTool: StateFlow<CanvasTool> = _activeTool.asStateFlow()
 
@@ -53,12 +56,22 @@ class BoardViewModel(
     )
     val activeBrush: StateFlow<Brush> = _activeBrush.asStateFlow()
 
-    // Стек предыдущих состояний списка штрихов для Undo (поддерживает отмену и рисования, и стирания)
+    // История для Undo
     private val undoStack = ArrayDeque<List<Stroke>>()
-
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+    private val _presetColors = MutableStateFlow(
+        mutableListOf(
+            0xFF1A1C1E.toInt(), // Чёрный
+            0xFFB3261E.toInt(), // Красный
+            0xFF1B6EF3.toInt(), // Синий
+            0xFF006C4C.toInt(), // Зелёный
+            0xFF6750A4.toInt()  // Фиолетовый
+        )
+    )
+    val presetColors: StateFlow<List<Int>> = _presetColors.asStateFlow()
 
+    //region Viewport Actions
     fun onTransform(
         panDeltaX: Float,
         panDeltaY: Float,
@@ -93,15 +106,14 @@ class BoardViewModel(
             ViewportState(offsetX = 0.0, offsetY = 0.0, scale = 1.0)
         }
     }
+    //endregion
 
+    //region Drawing & Editing Actions
     fun onStrokeCommitted(stroke: Stroke) {
         pushUndoSnapshot(_strokes.value)
         _strokes.update { currentList -> currentList + stroke }
     }
 
-    /**
-     * Удаляет штрихи с указанными ID при попадании ластика и записывает шаг в историю Undo.
-     */
     fun eraseStrokesByIds(idsToErase: Set<Long>) {
         if (idsToErase.isEmpty()) return
         val currentList = _strokes.value
@@ -134,4 +146,38 @@ class BoardViewModel(
         undoStack.addLast(snapshot)
         _canUndo.value = true
     }
+    //endregion
+
+    //region Color & Brush Customization
+    fun pinCurrentColor(colorArgb: Int) {
+        _presetColors.update { currentList ->
+            val mutable = currentList.toMutableList()
+            if (mutable.isNotEmpty()) {
+                mutable[mutable.size - 1] = colorArgb // Заменяем последний закрепленный цвет
+            } else {
+                mutable.add(colorArgb)
+            }
+            mutable
+        }
+    }
+
+    fun removePresetColor(index: Int) {
+        _presetColors.update { currentList ->
+            val mutable = currentList.toMutableList()
+            if (index in mutable.indices && mutable.size > 1) {
+                mutable.removeAt(index)
+            }
+            mutable
+        }
+    }
+
+    fun selectColor(colorArgb: Int) {
+        _activeBrush.update { it.copy(colorArgb = colorArgb) }
+    }
+
+    fun setSnappedBrushSize(rawSize: Float, step: Float = 4f) {
+        val snapped = ((rawSize / step).roundToInt() * step).coerceIn(2f, 32f)
+        _activeBrush.update { it.copy(baseSize = snapped) }
+    }
+    //endregion
 }

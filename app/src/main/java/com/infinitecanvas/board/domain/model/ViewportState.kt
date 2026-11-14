@@ -10,7 +10,6 @@ data class ViewportState(
     companion object {
         const val MIN_SCALE = 0.15  // 15%
         const val MAX_SCALE = 1.5  // 150%
-
         fun clampScale(targetScale: Double): Double {
             return min(MAX_SCALE, max(MIN_SCALE, targetScale))
         }
@@ -19,7 +18,6 @@ data class ViewportState(
     // Перевод экранных координат (px) в мировые координаты доски.
     fun screenToWorldX(screenX: Float): Double = (screenX - offsetX) / scale
     fun screenToWorldY(screenY: Float): Double = (screenY - offsetY) / scale
-
 
     // Перевод мировых координат в экранные (px).
     fun worldToScreenX(worldX: Double): Float = (worldX * scale + offsetX).toFloat()

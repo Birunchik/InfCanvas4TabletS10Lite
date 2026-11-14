@@ -1,5 +1,6 @@
 package com.infinitecanvas.board.presentation.canvas
 
+import android.annotation.SuppressLint
 import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -17,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -49,7 +49,6 @@ import kotlin.math.hypot
  * Бесконечный холст с пространственным индексом Quadtree, кэшем геометрии штрихов
  * и надёжной поддержкой боковой кнопки S Pen (BUTTON_STYLUS_PRIMARY) для ластика.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun InfiniteCanvasView(
     viewportState: ViewportState,
@@ -60,7 +59,7 @@ fun InfiniteCanvasView(
     onStrokeCommitted: (Stroke) -> Unit,
     onEraseStrokes: (Set<Long>) -> Unit,
     onTransform: (panX: Float, panY: Float, zoom: Float, centroidX: Float, centroidY: Float) -> Unit,
-    modifier: Modifier = Modifier,
+    @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     backgroundColor: Color = Color(0xFFF8F9FA),
     gridColor: Color = Color(0xFFE0E3E7),
     majorGridColor: Color = Color(0xFFC4C9D0)
@@ -102,7 +101,7 @@ fun InfiniteCanvasView(
                 }
                 false
             }
-            // 2. Пассивный наблюдатель Hover (показывает предпросмотр ластика до касания экрана)
+            // 1. Пассивный наблюдатель Hover (показывает/скрывает предпросмотр ластика)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -110,7 +109,14 @@ fun InfiniteCanvasView(
                         val stylusChange = event.changes.firstOrNull {
                             it.type == PointerType.Stylus || it.type == PointerType.Eraser
                         }
-                        if (stylusChange != null && !stylusChange.pressed) {
+
+                        // Если перо коснулось экрана, вышло за границы или пропало — сразу гасим круг
+                        if (stylusChange == null || event.type == PointerEventType.Exit) {
+                            if (eraserScreenPos != null) {
+                                eraserScreenPos = null
+                                activeTick++
+                            }
+                        } else {
                             val showPreview = isHardwareStylusButtonHeld ||
                                     event.buttons.isSecondaryPressed ||
                                     stylusChange.type == PointerType.Eraser ||
@@ -123,9 +129,6 @@ fun InfiniteCanvasView(
                                 eraserScreenPos = null
                                 activeTick++
                             }
-                        } else if (event.type == PointerEventType.Exit && eraserScreenPos != null) {
-                            eraserScreenPos = null
-                            activeTick++
                         }
                     }
                 }
@@ -298,18 +301,19 @@ fun InfiniteCanvasView(
             }
         }
 
+        // 3. Визуальный индикатор зоны действия ластика
         val cursor = eraserScreenPos
         if (cursor != null) {
             drawCircle(
-                color = Color(0x33D32F2F),
+                color = Color(0x33787878), //Полупрозрачный серый фон
                 radius = 22f,
                 center = cursor
             )
             drawCircle(
-                color = Color(0xFFD32F2F),
+                color = Color(0xFF606060), //серый контур
                 radius = 22f,
                 center = cursor,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f)
             )
         }
     }
@@ -519,7 +523,7 @@ private fun DrawScope.drawBatchedWorldGrid(
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+
 private fun appendFilteredPoints(
     change: PointerInputChange,
     viewport: ViewportState,
@@ -615,14 +619,13 @@ private fun buildVariableWidthOutline(
         val ry = curr.y.toFloat() - ny
         outPath.lineTo(rx, ry)
     }
-
     outPath.close()
 }
 
 private fun calculateWidthForBrush(brush: Brush, pressure: Float): Float {
     return when (brush.type) {
         BrushType.BALLPOINT -> brush.baseSize
-        BrushType.FOUNTAIN -> brush.baseSize * (0.2f + pressure * 2.2f)
+        BrushType.FOUNTAIN -> brush.baseSize * (0.4f + pressure * 1.2f)
         BrushType.PENCIL -> brush.baseSize * (0.45f + pressure * 0.55f)
     }.coerceAtLeast(0.5f)
 }

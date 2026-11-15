@@ -7,5 +7,8 @@
     <string name="action_undo">Отменить</string>
     <string name="action_clear">Очистить</string>
     <string name="action_reset_zoom">100%</string>
-    <string name="hud_status_format">Зум: %1$d%% | Штрихов: %2$d</string>
+    <string name="tool_lasso">Лассо</string>
+    <string name="action_delete_selected">Удалить выделенное</string>
+    <string name="action_clear_selection">Снять выделение</string>
+    <string name="hud_status_format">Зум: %1$d%%</string>
 </resources>

@@ -6,14 +6,12 @@ import android.graphics.Shader
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DropdownMenu
@@ -41,6 +43,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,6 +61,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinitecanvas.board.R
+import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.presentation.canvas.InfiniteCanvasView
@@ -67,35 +71,42 @@ import kotlin.math.roundToInt
 fun BoardScreen(
     viewModel: BoardViewModel = viewModel()
 ) {
-    val viewportState by viewModel.viewportState.collectAsState()
-    val strokes by viewModel.strokes.collectAsState()
     val activeTool by viewModel.activeTool.collectAsState()
     val activeBrush by viewModel.activeBrush.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val presetColors by viewModel.presetColors.collectAsState()
+    val selectedPresetIndex by viewModel.selectedPresetIndex.collectAsState()
+    val isZoomLocked by viewModel.isZoomLocked.collectAsState()
+    val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
+
+    val viewportState by viewModel.viewportState.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        InfiniteCanvasView(
-            viewportState = viewportState,
-            strokes = strokes,
-            activeTool = activeTool,
-            activeBrush = activeBrush,
-            allowFingerDrawing = false,
-            onStrokeCommitted = viewModel::onStrokeCommitted,
-            onEraseStrokes = viewModel::eraseStrokesByIds,
-            onTransform = viewModel::onTransform
+        CanvasLayer(
+            viewModel = viewModel,
+            isZoomLocked = isZoomLocked
         )
 
         BoardTopBar(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = 24.dp, top = 20.dp),
-            viewModel = viewModel,
+            selectedPresetIndex = selectedPresetIndex,
             activeTool = activeTool,
             activeBrush = activeBrush,
             canUndo = canUndo,
-            presetColors = presetColors
+            presetColors = presetColors,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 96.dp, top = 0.dp),
+            onSelectBrushType = { viewModel.selectBrushType(it) },
+            onSelectEraser = { viewModel.selectEraser() },
+            onSelectLasso = { viewModel.selectLassoTool() },
+            onUndo = { viewModel.undo() },
+            onSetBrushSize = { viewModel.setSnappedBrushSize(it, step = 2f) },
+            onSelectColor = { viewModel.selectColor(it) },
+            onSelectPresetIndex = { viewModel.selectPresetIndex(it) },
+            onRemovePresetColor = { viewModel.removePresetColor(it) },
+            onUpdatePresetColor = { index, color -> viewModel.updatePresetColorAt(index, color) },
+            onPinColor = { viewModel.pinCurrentColor(it) }
         )
 
         BoardBottomHud(
@@ -104,18 +115,60 @@ fun BoardScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(16.dp),
             zoom = viewportState.scale,
-            strokesCount = strokes.size,
+            isZoomLocked = isZoomLocked,
+            selectedCount = selectedStrokeIds.size,
+            onDeleteSelected = { viewModel.deleteSelectedStrokes() },
+            onClearSelection = { viewModel.clearSelection() },
+            onToggleZoomLock = { viewModel.toggleZoomLock() },
             onResetZoom = viewModel::resetViewport
         )
     }
 }
 @Composable
-private fun BoardTopBar(
+private fun CanvasLayer(
     viewModel: BoardViewModel,
+    isZoomLocked: Boolean
+) {
+    val viewportState by viewModel.viewportState.collectAsState()
+    val strokes by viewModel.strokes.collectAsState()
+    val activeTool by viewModel.activeTool.collectAsState()
+    val activeBrush by viewModel.activeBrush.collectAsState()
+    val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
+
+    InfiniteCanvasView(
+        isZoomLocked = isZoomLocked,
+        viewportState = viewportState,
+        strokes = strokes,
+        activeTool = activeTool,
+        activeBrush = activeBrush,
+        selectedStrokeIds = selectedStrokeIds,
+        allowFingerDrawing = false,
+        onStrokeCommitted = viewModel::onStrokeCommitted,
+        onEraseStrokes = viewModel::eraseStrokesByIds,
+        onStrokesSelected = viewModel::selectStrokes,
+        onMoveSelectedStrokes = viewModel::moveSelectedStrokes,
+        onTransform = viewModel::onTransform
+    )
+}
+
+@Composable
+private fun BoardTopBar(
     activeTool: CanvasTool,
-    activeBrush: com.infinitecanvas.board.domain.model.Brush,
+    activeBrush: Brush,
     canUndo: Boolean,
     presetColors: List<Int>,
+    selectedPresetIndex: Int?,
+    // callbacks
+    onSelectBrushType: (BrushType) -> Unit,
+    onSelectEraser: () -> Unit,
+    onSelectLasso: () -> Unit,
+    onUndo: () -> Unit,
+    onSetBrushSize: (Float) -> Unit,
+    onSelectColor: (Int) -> Unit,
+    onSelectPresetIndex: (Int?) -> Unit,
+    onRemovePresetColor: (Int) -> Unit,
+    onUpdatePresetColor: (Int, Int) -> Unit,
+    onPinColor: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -129,7 +182,11 @@ private fun BoardTopBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BrushSelector(activeTool = activeTool, activeBrush = activeBrush, viewModel = viewModel)
+            BrushSelector(
+                activeTool = activeTool,
+                activeBrush = activeBrush,
+                onSelectBrushType = onSelectBrushType
+            )
 
             HorizontalDivider(
                 modifier = Modifier.width(1.dp).height(32.dp),
@@ -137,7 +194,16 @@ private fun BoardTopBar(
                 color = MaterialTheme.colorScheme.outlineVariant
             )
 
-            ColorPickerSection(activeBrushColor = activeBrush.colorArgb, presetColors = presetColors, viewModel = viewModel)
+            ColorPickerSection(
+                selectedPresetIndex = selectedPresetIndex,
+                activeBrushColor = activeBrush.colorArgb,
+                presetColors = presetColors,
+                onSelectColor = onSelectColor,
+                onSelectPresetIndex = onSelectPresetIndex,
+                onRemovePresetColor = onRemovePresetColor,
+                onUpdatePresetColor = onUpdatePresetColor,
+                onPinColor = onPinColor
+            )
 
             HorizontalDivider(
                 modifier = Modifier.width(1.dp).height(32.dp),
@@ -147,7 +213,7 @@ private fun BoardTopBar(
 
             BrushSizeSlider(
                 currentSize = activeBrush.baseSize,
-                onSizeChanged = { viewModel.setSnappedBrushSize(it, step = 4f) }
+                onSizeChanged = onSetBrushSize
             )
 
             HorizontalDivider(
@@ -158,13 +224,20 @@ private fun BoardTopBar(
 
             FilterChip(
                 selected = activeTool == CanvasTool.ERASER,
-                onClick = { viewModel.selectEraser() },
+                onClick = onSelectEraser,
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                 label = { Text(stringResource(R.string.tool_eraser)) }
             )
 
+            FilterChip(
+                selected = activeTool == CanvasTool.LASSO,
+                onClick = onSelectLasso, // прокиньте viewModel::selectLassoTool
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                label = { Text(stringResource(R.string.tool_lasso)) }
+            )
+
             IconButton(
-                onClick = { viewModel.undo() },
+                onClick = onUndo,
                 enabled = canUndo,
                 modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             ) {
@@ -178,32 +251,15 @@ private fun BoardTopBar(
 }
 
 @Composable
-private fun BrushSelector(
-    activeTool: CanvasTool,
-    activeBrush: com.infinitecanvas.board.domain.model.Brush,
-    viewModel: BoardViewModel
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(
-            BrushType.BALLPOINT to R.string.brush_ballpoint,
-            BrushType.FOUNTAIN to R.string.brush_fountain,
-            BrushType.PENCIL to R.string.brush_pencil
-        ).forEach { (type, labelRes) ->
-            FilterChip(
-                selected = activeTool == CanvasTool.BRUSH && activeBrush.type == type,
-                onClick = { viewModel.selectBrushType(type) },
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                label = { Text(stringResource(labelRes)) }
-            )
-        }
-    }
-}
-
-@Composable
 private fun ColorPickerSection(
+    selectedPresetIndex: Int?,
     activeBrushColor: Int,
     presetColors: List<Int>,
-    viewModel: BoardViewModel
+    onSelectColor: (Int) -> Unit,
+    onSelectPresetIndex: (Int?) -> Unit,
+    onRemovePresetColor: (Int) -> Unit,
+    onUpdatePresetColor: (Int, Int) -> Unit,
+    onPinColor: (Int) -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -212,26 +268,41 @@ private fun ColorPickerSection(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            presetColors.forEach { colorInt ->
+            presetColors.forEachIndexed { index, colorInt ->
                 val isSelected = activeBrushColor == colorInt
                 Box(
                     modifier = Modifier
-                        .size(if (isSelected) 28.dp else 24.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(Color(colorInt))
                         .then(
                             if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                             else Modifier
                         )
-                        .clickable {
-                            if (isSelected) menuExpanded = true
-                            else viewModel.selectColor(colorInt)
-                        }
+                        .combinedClickable(
+                            onClick = {
+                                if (isSelected) {
+                                    onSelectPresetIndex(index)
+                                    menuExpanded = true
+                                } else {
+                                    onSelectColor(colorInt)
+                                    onSelectPresetIndex(index)
+                                }
+                            },
+                            onDoubleClick = {
+                                if (presetColors.size > 1) {
+                                    onRemovePresetColor(index)
+                                }
+                            }
+                        )
                 )
             }
 
             IconButton(
-                onClick = { menuExpanded = true },
+                onClick = {
+                    onSelectPresetIndex(null)
+                    menuExpanded = true
+                },
                 modifier = Modifier.size(36.dp)
             ) {
                 Box(
@@ -262,105 +333,75 @@ private fun ColorPickerSection(
         ) {
             MiniatureColorPickerContent(
                 initialColorInt = activeBrushColor,
-                onColorChanged = { viewModel.selectColor(it) },
-                onPinColor = {
-                    viewModel.pinCurrentColor(it)
+                onColorChanged = { colorInt ->
+                    if (selectedPresetIndex != null) {
+                        onUpdatePresetColor(selectedPresetIndex, colorInt)
+                    } else {
+                        onSelectColor(colorInt)
+                    }
+                },
+                onPinColor = { colorInt ->
+                    if (selectedPresetIndex == null) {
+                        onPinColor(colorInt)
+                    }
                     menuExpanded = false
                 }
             )
         }
     }
 }
-
-@Composable
-private fun BrushSizeSlider(
-    currentSize: Float,
-    onSizeChanged: (Float) -> Unit
-) {
-    Column(
-        modifier = Modifier.width(130.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Размер: ${currentSize.toInt()}px",
-            style = MaterialTheme.typography.labelSmall
-        )
-        Slider(
-            value = currentSize,
-            onValueChange = onSizeChanged,
-            valueRange = 2f..24f,
-            steps = 5,
-            modifier = Modifier.height(32.dp)
-        )
-    }
-}
-
-@Composable
-private fun BoardBottomHud(
-    zoom: Double,
-    strokesCount: Int,
-    onResetZoom: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val zoomPercent = (zoom * 100).roundToInt()
-            Text(
-                text = stringResource(R.string.hud_status_format, zoomPercent, strokesCount),
-                style = MaterialTheme.typography.labelLarge
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            FilledTonalButton(
-                onClick = onResetZoom,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
-            ) {
-                Text(stringResource(R.string.action_reset_zoom))
-            }
-        }
-    }
-}
-
 @Composable
 fun MiniatureColorPickerContent(
     initialColorInt: Int,
     onColorChanged: (Int) -> Unit,
     onPinColor: (Int) -> Unit
 ) {
-    val hsv = FloatArray(3).apply { AndroidColor.colorToHSV(initialColorInt, this) }
+    // Конвертируем начальный цвет в HSV один раз при инициализации
+    val initialHsv = remember(initialColorInt) {
+        FloatArray(3).apply { AndroidColor.colorToHSV(initialColorInt, this) }
+    }
 
-    var hue by remember { mutableFloatStateOf(hsv[0]) }
-    var saturation by remember { mutableFloatStateOf(hsv[1]) }
-    var value by remember { mutableFloatStateOf(hsv[2]) }
+    var hue by remember { mutableFloatStateOf(initialHsv[0]) }
+    var saturation by remember { mutableFloatStateOf(initialHsv[1]) }
+    var value by remember { mutableFloatStateOf(initialHsv[2]) }
 
-    val currentInt = AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value))
+    // Если внешний цвет изменился извне (не во время активного драга), синхронизируем
+    LaunchedEffect(initialColorInt) {
+        val currentHsv = FloatArray(3).apply { AndroidColor.colorToHSV(initialColorInt, this) }
+        // Обновляем только если цвета реально отличаются, чтобы не сбивать жест
+        val calculatedInt = AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value))
+        if (calculatedInt != initialColorInt) {
+            hue = currentHsv[0]
+            saturation = currentHsv[1]
+            value = currentHsv[2]
+        }
+    }
+
+    val currentInt = remember(hue, saturation, value) {
+        AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value))
+    }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // SV-квадрат
+        // SV-квадрат (объединяем логику тапа и драга безопасно)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(130.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .pointerInput(hue) {
-                    detectTapGestures { offset ->
-                        saturation = (offset.x / size.width).coerceIn(0f, 1f)
-                        value = (1f - (offset.y / size.height)).coerceIn(0f, 1f)
-                        onColorChanged(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
-                    }
-                }
-                .pointerInput(hue) {
-                    detectDragGestures { change, _ ->
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            saturation = (offset.x / size.width).coerceIn(0f, 1f)
+                            value = (1f - (offset.y / size.height)).coerceIn(0f, 1f)
+                            onColorChanged(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+                        },
+                        onDragEnd = {
+                            onColorChanged(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
+                        }
+                    ) { change, _ ->
                         saturation = (change.position.x / size.width).coerceIn(0f, 1f)
                         value = (1f - (change.position.y / size.height)).coerceIn(0f, 1f)
                         onColorChanged(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, value)))
@@ -386,7 +427,7 @@ fun MiniatureColorPickerContent(
                 drawRect(brush = ShaderBrush(verticalShader))
 
                 val markerX = saturation * width
-                val markerY = (1f - value) * height
+                val markerY = (1f - value) * height // Исправлена опечатка
 
                 drawCircle(color = Color.White, radius = 7f, center = Offset(markerX, markerY))
                 drawCircle(color = Color.Black, radius = 5f, center = Offset(markerX, markerY))
@@ -432,3 +473,131 @@ fun MiniatureColorPickerContent(
         }
     }
 }
+
+@Composable
+private fun BrushSizeSlider(
+    currentSize: Float,
+    onSizeChanged: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier.width(130.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Размер: ${currentSize.toInt()}px",
+            style = MaterialTheme.typography.labelSmall
+        )
+        Slider(
+            value = currentSize,
+            onValueChange = onSizeChanged,
+            valueRange = 0f..12f,
+            steps = 5,
+            modifier = Modifier.height(32.dp)
+        )
+    }
+}
+@Composable
+private fun BrushSelector(
+    activeTool: CanvasTool,
+    activeBrush: Brush,
+    onSelectBrushType: (BrushType) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            BrushType.BALLPOINT to R.string.brush_ballpoint,
+            BrushType.FOUNTAIN to R.string.brush_fountain,
+            BrushType.PENCIL to R.string.brush_pencil
+        ).forEach { (type, labelRes) ->
+            FilterChip(
+                selected = activeTool == CanvasTool.BRUSH && activeBrush.type == type,
+                onClick = { onSelectBrushType(type) },
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                label = { Text(stringResource(labelRes)) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoardBottomHud(
+    zoom: Double,
+    isZoomLocked: Boolean,
+    selectedCount: Int,
+    onToggleZoomLock: () -> Unit,
+    onResetZoom: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onClearSelection: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Кнопки управления выделением (показываются только при активном выделении)
+            if (selectedCount > 0) {
+                IconButton(
+                    onClick = onDeleteSelected,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.action_delete_selected),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                IconButton(
+                    onClick = onClearSelection,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.action_clear_selection)
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(24.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+
+            val zoomPercent = (zoom * 100).roundToInt()
+            Text(
+                text = stringResource(R.string.hud_status_format, zoomPercent),
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            // Кнопка блокировки зума
+            IconButton(
+                onClick = onToggleZoomLock,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isZoomLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                    contentDescription = if (isZoomLocked) "Зум заблокирован" else "Зум разблокирован",
+                    tint = if (isZoomLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            FilledTonalButton(
+                onClick = onResetZoom,
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+            ) {
+                Text(stringResource(R.string.action_reset_zoom))
+            }
+        }
+    }
+}
+

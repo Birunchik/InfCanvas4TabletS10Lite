@@ -60,16 +60,6 @@ class BoardViewModel(
     private val undoStack = ArrayDeque<List<Stroke>>()
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
-    private val _presetColors = MutableStateFlow(
-        mutableListOf(
-            0xFF1A1C1E.toInt(), // Чёрный
-            0xFFB3261E.toInt(), // Красный
-            0xFF1B6EF3.toInt(), // Синий
-            0xFF006C4C.toInt(), // Зелёный
-            0xFF6750A4.toInt()  // Фиолетовый
-        )
-    )
-    val presetColors: StateFlow<List<Int>> = _presetColors.asStateFlow()
 
     //region Viewport Actions
     fun onTransform(
@@ -149,13 +139,50 @@ class BoardViewModel(
     //endregion
 
     //region Color & Brush Customization
+    private val _presetColors = MutableStateFlow(
+        mutableListOf(
+            0xFF1A1C1E.toInt(), // Чёрный
+            0xFFB3261E.toInt(), // Красный
+            0xFF1B6EF3.toInt(), // Синий
+            0xFF006C4C.toInt(), // Зелёный
+            0xFF6750A4.toInt()  // Фиолетовый
+        )
+    )
+    val presetColors: StateFlow<List<Int>> = _presetColors.asStateFlow()
+
+private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
+    val selectedPresetIndex: StateFlow<Int?> = _selectedPresetIndex.asStateFlow()
+
+    fun selectPresetIndex(index: Int?) {
+        _selectedPresetIndex.value = index
+    }
+
+    // Обновление конкретного пресета по его индексу при движении ползунков в панели
+    fun updatePresetColorAt(index: Int, colorArgb: Int) {
+        _presetColors.update { currentList ->
+            val mutable = currentList.toMutableList()
+            if (index in mutable.indices) {
+                mutable[index] = colorArgb
+            }
+            mutable
+        }
+        // Также сразу делаем его активным цветом кисти
+        _activeBrush.update { it.copy(colorArgb = colorArgb) }
+    }
+
+    // Метод добавления нового цвета (сдвиг остальных, черный на месте 0, максимум 5)
     fun pinCurrentColor(colorArgb: Int) {
         _presetColors.update { currentList ->
             val mutable = currentList.toMutableList()
-            if (mutable.isNotEmpty()) {
-                mutable[mutable.size - 1] = colorArgb // Заменяем последний закрепленный цвет
-            } else {
-                mutable.add(colorArgb)
+            if (!mutable.contains(colorArgb)) {
+                if (mutable.size > 1) {
+                    mutable.add(1, colorArgb) // Вставляем после черного (индекс 0)
+                } else {
+                    mutable.add(colorArgb)
+                }
+                while (mutable.size > 5) {
+                    mutable.removeAt(mutable.size - 1)
+                }
             }
             mutable
         }
@@ -175,9 +202,52 @@ class BoardViewModel(
         _activeBrush.update { it.copy(colorArgb = colorArgb) }
     }
 
-    fun setSnappedBrushSize(rawSize: Float, step: Float = 4f) {
-        val snapped = ((rawSize / step).roundToInt() * step).coerceIn(2f, 32f)
+    fun setSnappedBrushSize(rawSize: Float, step: Float = 2f) {
+        val snapped = ((rawSize / step).roundToInt() * step).coerceIn(2f, 12f)
         _activeBrush.update { it.copy(baseSize = snapped) }
     }
     //endregion
+
+    // Состояние блокировки зума
+    private val _isZoomLocked = MutableStateFlow(false)
+    val isZoomLocked: StateFlow<Boolean> = _isZoomLocked.asStateFlow()
+
+    fun toggleZoomLock() {
+        _isZoomLocked.value = !_isZoomLocked.value
+    }
+
+
+    // Выделенные штрихи (инструмент Лассо)
+    private val _selectedStrokeIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedStrokeIds: StateFlow<Set<Long>> = _selectedStrokeIds.asStateFlow()
+
+    fun selectLassoTool() {
+        _activeTool.value = CanvasTool.LASSO
+    }
+
+    fun selectStrokes(ids: Set<Long>) {
+        _selectedStrokeIds.value = ids
+    }
+
+    fun clearSelection() {
+        _selectedStrokeIds.value = emptySet()
+    }
+
+    fun moveSelectedStrokes(dx: Double, dy: Double) {
+        val ids = _selectedStrokeIds.value
+        if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
+
+        val currentList = _strokes.value
+        pushUndoSnapshot(currentList)
+        _strokes.value = currentList.map { stroke ->
+            if (stroke.id in ids) stroke.translated(dx, dy) else stroke
+        }
+    }
+
+    fun deleteSelectedStrokes() {
+        val ids = _selectedStrokeIds.value
+        if (ids.isEmpty()) return
+        eraseStrokesByIds(ids)
+        _selectedStrokeIds.value = emptySet()
+    }
 }

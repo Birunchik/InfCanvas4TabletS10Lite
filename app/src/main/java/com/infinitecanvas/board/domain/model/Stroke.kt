@@ -58,15 +58,27 @@ data class WorldBounds(
     }
 }
 
-/**
- * Завершённый векторный штрих на бесконечном холсте.
- */
+ //Завершённый векторный штрих на бесконечном холсте.
 data class Stroke(
     val id: Long,
     val points: List<StrokePoint>,
     val brush: Brush,
     val bounds: WorldBounds
 ) {
+
+    //Возвращает копию штриха, сдвинутую на ([dx], [dy]) в мировых координатах,
+    fun translated(dx: Double, dy: Double): Stroke {
+        if (dx == 0.0 && dy == 0.0) return this
+        val shiftedPoints = points.map { pt ->
+            pt.copy(x = pt.x + dx, y = pt.y + dy)
+        }
+        return create(
+            id = id,
+            points = shiftedPoints,
+            brush = brush
+        )
+    }
+
     companion object {
         /**
          * Создаёт штрих и автоматически вычисляет его мировые границы.

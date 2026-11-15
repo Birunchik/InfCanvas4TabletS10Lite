@@ -24,4 +24,29 @@
     <string name="action_clear_selection">Снять выделение</string>
 
     <string name="hud_status_format">Зум: %1$d%%</string>
+
+    <string name="folder_all_boards">Все доски</string>
+    <string name="folder_unassigned">Без папки</string>
+    <string name="folders_section_title">Папки</string>
+    <string name="action_create_folder">Новая папка</string>
+    <string name="action_folder_options">Параметры папки</string>
+    <string name="action_board_options">Параметры доски</string>
+    <string name="action_open_folders">Открыть папки</string>
+    <string name="action_new_board">Новая доска</string>
+    <string name="action_rename">Переименовать</string>
+    <string name="action_move_to_folder">Переместить в папку</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_create">Создать</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_clear_search">Очистить поиск</string>
+    <string name="action_back_to_boards">К списку досок</string>
+    <string name="search_boards_hint">Поиск досок…</string>
+    <string name="default_board_title">Доска</string>
+    <string name="board_empty_preview">Пустой холст</string>
+    <string name="empty_boards_title">В этой папке пока нет досок</string>
+    <string name="empty_boards_subtitle">Нажмите «Новая доска», чтобы начать рисовать</string>
+    <string name="dialog_new_folder_title">Создать папку</string>
+    <string name="dialog_rename_folder_title">Переименовать папку</string>
+    <string name="dialog_rename_board_title">Переименовать доску</string>
 </resources>

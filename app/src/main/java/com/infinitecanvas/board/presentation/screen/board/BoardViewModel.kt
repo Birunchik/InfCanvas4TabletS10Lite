@@ -1,13 +1,18 @@
 package com.infinitecanvas.board.presentation.screen.board
 
-import androidx.lifecycle.SavedStateHandle
+import android.annotation.SuppressLint
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
+import com.infinitecanvas.board.domain.repository.BoardRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,106 +20,157 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
-/**
- * ViewModel экрана бесконечной доски.
- * Управляет положением камеры, списком штрихов, инструментами и историей Undo.
- */
 class BoardViewModel(
-    private val savedStateHandle: SavedStateHandle
+    private val repository: BoardRepository,
+    private val thumbnailGenerator: ThumbnailGenerator
 ) : ViewModel() {
 
-    companion object {
-        private const val KEY_OFFSET_X = "viewport_offset_x"
-        private const val KEY_OFFSET_Y = "viewport_offset_y"
-        private const val KEY_SCALE = "viewport_scale"
-        private const val MAX_HISTORY_STEPS = 50
-    }
+    private var currentBoardId: Long? = null
+    private var autoSaveJob: Job? = null
+    private var hasUnsavedChanges: Boolean = false
 
-    // Состояние вьюпорта (камеры)
-    private val _viewportState = MutableStateFlow(
-        ViewportState(
-            offsetX = savedStateHandle.get<Double>(KEY_OFFSET_X) ?: 0.0,
-            offsetY = savedStateHandle.get<Double>(KEY_OFFSET_Y) ?: 0.0,
-            scale = savedStateHandle.get<Double>(KEY_SCALE) ?: 1.0
-        )
-    )
+    private val _boardTitle = MutableStateFlow("")
+    val boardTitle: StateFlow<String> = _boardTitle.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _viewportState = MutableStateFlow(ViewportState())
     val viewportState: StateFlow<ViewportState> = _viewportState.asStateFlow()
 
-    // Штрихи на холсте
+    private val _isZoomLocked = MutableStateFlow(false)
+    val isZoomLocked: StateFlow<Boolean> = _isZoomLocked.asStateFlow()
+
     private val _strokes = MutableStateFlow<List<Stroke>>(emptyList())
     val strokes: StateFlow<List<Stroke>> = _strokes.asStateFlow()
 
-    // Активный инструмент и кисть
     private val _activeTool = MutableStateFlow(CanvasTool.BRUSH)
     val activeTool: StateFlow<CanvasTool> = _activeTool.asStateFlow()
 
     private val _activeBrush = MutableStateFlow(
         Brush(
-            type = BrushType.FOUNTAIN,
+            type = BrushType.BALLPOINT,
             colorArgb = 0xFF1A1C1E.toInt(),
-            baseSize = 4f,
-            opacity = 1f
+            baseSize = 4f
         )
     )
     val activeBrush: StateFlow<Brush> = _activeBrush.asStateFlow()
 
-    // История для Undo
+    private val _selectedStrokeIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedStrokeIds: StateFlow<Set<Long>> = _selectedStrokeIds.asStateFlow()
+
+    private val _presetColors = MutableStateFlow(
+        listOf(
+            0xFF1A1C1E.toInt(),
+            0xFFD93025.toInt(),
+            0xFF1A73E8.toInt(),
+            0xFF1E8E3E.toInt()
+        )
+    )
+    val presetColors: StateFlow<List<Int>> = _presetColors.asStateFlow()
+
+    private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
+    val selectedPresetIndex: StateFlow<Int?> = _selectedPresetIndex.asStateFlow()
+
     private val undoStack = ArrayDeque<List<Stroke>>()
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
-    //region Viewport Actions
-    fun onTransform(
-        panDeltaX: Float,
-        panDeltaY: Float,
-        zoomFactor: Float,
-        centroidX: Float,
-        centroidY: Float
-    ) {
-        _viewportState.update { current ->
-            val newScale = ViewportState.clampScale(current.scale * zoomFactor)
-            val actualZoom = newScale / current.scale
+    private val _clipboardStrokes = MutableStateFlow<List<Stroke>>(emptyList())
+    val hasClipboardContent: StateFlow<Boolean> = _clipboardStrokes
+        .map { it.isNotEmpty() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
+        )
 
-            val newOffsetX = centroidX - (centroidX - current.offsetX) * actualZoom + panDeltaX
-            val newOffsetY = centroidY - (centroidY - current.offsetY) * actualZoom + panDeltaY
+    private var pasteCascadeCount = 0
 
-            savedStateHandle[KEY_OFFSET_X] = newOffsetX
-            savedStateHandle[KEY_OFFSET_Y] = newOffsetY
-            savedStateHandle[KEY_SCALE] = newScale
+    /**
+     * Загружает доску по идентификатору из репозитория.
+     */
+    fun openBoard(boardId: Long) {
+        if (currentBoardId == boardId && !_isLoading.value) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            undoStack.clear()
+            _canUndo.value = false
+            _selectedStrokeIds.value = emptySet()
 
-            current.copy(
-                offsetX = newOffsetX,
-                offsetY = newOffsetY,
-                scale = newScale
+            val doc = repository.loadBoard(boardId)
+            if (doc != null) {
+                currentBoardId = boardId
+                _boardTitle.value = doc.summary.title
+                _strokes.value = doc.strokes
+                _viewportState.value = doc.viewport
+                hasUnsavedChanges = false
+            }
+            _isLoading.value = false
+        }
+    }
+
+    /**
+     * Принудительно сохраняет доску и обновляет превью (вызывать при закрытии доски или onStop).
+     */
+    fun flushSaveAndThumbnail(onFinished: (() -> Unit)? = null) {
+        val boardId = currentBoardId ?: run {
+            onFinished?.invoke()
+            return
+        }
+        autoSaveJob?.cancel()
+        val strokesSnapshot = _strokes.value
+        val viewportSnapshot = _viewportState.value
+
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                val thumbPath = thumbnailGenerator.generateAndSave(boardId, strokesSnapshot)
+                repository.saveBoardContent(
+                    boardId = boardId,
+                    strokes = strokesSnapshot,
+                    viewport = viewportSnapshot,
+                    thumbnailPath = thumbPath
+                )
+                hasUnsavedChanges = false
+            }
+            onFinished?.invoke()
+        }
+    }
+
+    private fun scheduleAutoSave(regenerateThumbnail: Boolean) {
+        val boardId = currentBoardId ?: return
+        hasUnsavedChanges = true
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            delay(1_500L.milliseconds)
+            val strokesSnapshot = _strokes.value
+            val viewportSnapshot = _viewportState.value
+            val thumbPath = if (regenerateThumbnail) {
+                thumbnailGenerator.generateAndSave(boardId, strokesSnapshot)
+            } else {
+                null
+            }
+            repository.saveBoardContent(
+                boardId = boardId,
+                strokes = strokesSnapshot,
+                viewport = viewportSnapshot,
+                thumbnailPath = thumbPath
             )
+            hasUnsavedChanges = false
         }
     }
 
-    fun resetViewport() {
-        _viewportState.update {
-            savedStateHandle[KEY_OFFSET_X] = 0.0
-            savedStateHandle[KEY_OFFSET_Y] = 0.0
-            savedStateHandle[KEY_SCALE] = 1.0
-            ViewportState(offsetX = 0.0, offsetY = 0.0, scale = 1.0)
-        }
-    }
-    //endregion
-
-    //region Drawing & Editing Actions
-    fun onStrokeCommitted(stroke: Stroke) {
-        pushUndoSnapshot(_strokes.value)
-        _strokes.update { currentList -> currentList + stroke }
-    }
-
-    fun eraseStrokesByIds(idsToErase: Set<Long>) {
-        if (idsToErase.isEmpty()) return
-        val currentList = _strokes.value
-        val filtered = currentList.filterNot { it.id in idsToErase }
-        if (filtered.size != currentList.size) {
-            pushUndoSnapshot(currentList)
-            _strokes.value = filtered
+    fun renameCurrentBoard(newTitle: String) {
+        val boardId = currentBoardId ?: return
+        val trimmed = newTitle.trim()
+        if (trimmed.isEmpty()) return
+        _boardTitle.value = trimmed
+        viewModelScope.launch {
+            repository.renameBoard(boardId, trimmed)
         }
     }
 
@@ -125,105 +181,8 @@ class BoardViewModel(
 
     fun selectEraser() {
         _activeTool.value = CanvasTool.ERASER
+        _selectedStrokeIds.value = emptySet()
     }
-
-    fun undo() {
-        if (undoStack.isEmpty()) return
-        _strokes.value = undoStack.removeLast()
-        _canUndo.value = undoStack.isNotEmpty()
-    }
-
-    private fun pushUndoSnapshot(snapshot: List<Stroke>) {
-        if (undoStack.size >= MAX_HISTORY_STEPS) {
-            undoStack.removeFirst()
-        }
-        undoStack.addLast(snapshot)
-        _canUndo.value = true
-    }
-    //endregion
-
-    //region Color & Brush Customization
-    private val _presetColors = MutableStateFlow(
-        mutableListOf(
-            0xFF1A1C1E.toInt(), // Чёрный
-            0xFFB3261E.toInt(), // Красный
-            0xFF1B6EF3.toInt(), // Синий
-            0xFF006C4C.toInt(), // Зелёный
-            0xFF6750A4.toInt()  // Фиолетовый
-        )
-    )
-    val presetColors: StateFlow<List<Int>> = _presetColors.asStateFlow()
-
-private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
-    val selectedPresetIndex: StateFlow<Int?> = _selectedPresetIndex.asStateFlow()
-
-    fun selectPresetIndex(index: Int?) {
-        _selectedPresetIndex.value = index
-    }
-
-    // Обновление конкретного пресета по его индексу при движении ползунков в панели
-    fun updatePresetColorAt(index: Int, colorArgb: Int) {
-        _presetColors.update { currentList ->
-            val mutable = currentList.toMutableList()
-            if (index in mutable.indices) {
-                mutable[index] = colorArgb
-            }
-            mutable
-        }
-        // Также сразу делаем его активным цветом кисти
-        _activeBrush.update { it.copy(colorArgb = colorArgb) }
-    }
-
-    // Метод добавления нового цвета (сдвиг остальных, черный на месте 0, максимум 5)
-    fun pinCurrentColor(colorArgb: Int) {
-        _presetColors.update { currentList ->
-            val mutable = currentList.toMutableList()
-            if (!mutable.contains(colorArgb)) {
-                if (mutable.size > 1) {
-                    mutable.add(1, colorArgb) // Вставляем после черного (индекс 0)
-                } else {
-                    mutable.add(colorArgb)
-                }
-                while (mutable.size > 5) {
-                    mutable.removeAt(mutable.size - 1)
-                }
-            }
-            mutable
-        }
-    }
-
-    fun removePresetColor(index: Int) {
-        _presetColors.update { currentList ->
-            val mutable = currentList.toMutableList()
-            if (index in mutable.indices && mutable.size > 1) {
-                mutable.removeAt(index)
-            }
-            mutable
-        }
-    }
-
-    fun selectColor(colorArgb: Int) {
-        _activeBrush.update { it.copy(colorArgb = colorArgb) }
-    }
-
-    fun setSnappedBrushSize(rawSize: Float, step: Float = 2f) {
-        val snapped = ((rawSize / step).roundToInt() * step).coerceIn(2f, 12f)
-        _activeBrush.update { it.copy(baseSize = snapped) }
-    }
-    //endregion
-
-    // Состояние блокировки зума
-    private val _isZoomLocked = MutableStateFlow(false)
-    val isZoomLocked: StateFlow<Boolean> = _isZoomLocked.asStateFlow()
-
-    fun toggleZoomLock() {
-        _isZoomLocked.value = !_isZoomLocked.value
-    }
-
-
-    // Выделенные штрихи (инструмент Лассо)
-    private val _selectedStrokeIds = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedStrokeIds: StateFlow<Set<Long>> = _selectedStrokeIds.asStateFlow()
 
     fun selectLassoTool() {
         _activeTool.value = CanvasTool.LASSO
@@ -237,43 +196,33 @@ private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
         _selectedStrokeIds.value = emptySet()
     }
 
+    fun deleteSelectedStrokes() {
+        val ids = _selectedStrokeIds.value
+        if (ids.isEmpty()) return
+        val currentList = _strokes.value
+        val filtered = currentList.filterNot { it.id in ids }
+        if (filtered.size != currentList.size) {
+            pushUndoSnapshot(currentList)
+            _strokes.value = filtered
+            scheduleAutoSave(regenerateThumbnail = true)
+        }
+        _selectedStrokeIds.value = emptySet()
+    }
+
     fun moveSelectedStrokes(dx: Double, dy: Double) {
         val ids = _selectedStrokeIds.value
         if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
-
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
         _strokes.value = currentList.map { stroke ->
             if (stroke.id in ids) stroke.translated(dx, dy) else stroke
         }
+        scheduleAutoSave(regenerateThumbnail = true)
     }
 
-    fun deleteSelectedStrokes() {
-        val ids = _selectedStrokeIds.value
-        if (ids.isEmpty()) return
-        eraseStrokesByIds(ids)
-        _selectedStrokeIds.value = emptySet()
-    }
-
-    // Буфер обмена для копирования и вставки выделенных лассо штрихов
-    private val _clipboardStrokes = MutableStateFlow<List<Stroke>>(emptyList())
-    val hasClipboardContent: StateFlow<Boolean> = _clipboardStrokes
-        .map { it.isNotEmpty() }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = false
-        )
-
-    private var pasteCascadeCount = 0
-
-    /**
-     * Копирует текущие выделенные штрихи во внутренний буфер обмена доски.
-     */
     fun copySelectedStrokes() {
         val ids = _selectedStrokeIds.value
         if (ids.isEmpty()) return
-
         val copied = _strokes.value.filter { it.id in ids }
         if (copied.isNotEmpty()) {
             _clipboardStrokes.value = copied
@@ -281,15 +230,6 @@ private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
         }
     }
 
-    /**
-     * Вставляет штрихи из буфера обмена на холст со смещением,
-     * сохраняет снимок в Undo и автоматически выделяет вставленную группу.
-     */
-    /**
-     * Вставляет штрихи из буфера обмена на холст со смещением,
-     * сохраняет снимок в Undo и автоматически выделяет вставленную группу,
-     * не изменяя текущий активный инструмент.
-     */
     fun pasteClipboardStrokes() {
         val clipboard = _clipboardStrokes.value
         if (clipboard.isEmpty()) return
@@ -307,8 +247,132 @@ private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
         _strokes.value = currentList + pastedStrokes
-
-        // Выделяем вставленные объекты, оставляя activeTool неизменным
         _selectedStrokeIds.value = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
+        scheduleAutoSave(regenerateThumbnail = true)
+    }
+
+    fun selectColor(colorArgb: Int) {
+        _activeBrush.update { it.copy(colorArgb = colorArgb) }
+    }
+
+    fun selectPresetIndex(index: Int?) {
+        _selectedPresetIndex.value = index
+    }
+
+    fun updatePresetColorAt(index: Int, newColorArgb: Int) {
+        _presetColors.update { current ->
+            if (index in current.indices) {
+                current.toMutableList().apply { set(index, newColorArgb) }
+            } else {
+                current
+            }
+        }
+        _activeBrush.update { it.copy(colorArgb = newColorArgb) }
+    }
+
+    fun pinCurrentColor(colorArgb: Int) {
+        _presetColors.update { current ->
+            if (current.contains(colorArgb)) {
+                current
+            } else if (current.size < 4) {
+                current + colorArgb
+            } else {
+                listOf(current[0], current[2], current[3], colorArgb)
+            }
+        }
+        val newList = _presetColors.value
+        _selectedPresetIndex.value = newList.indexOf(colorArgb).takeIf { it >= 0 }
+        _activeBrush.update { it.copy(colorArgb = colorArgb) }
+    }
+
+    fun removePresetColor(index: Int) {
+        val current = _presetColors.value
+        if (current.size <= 1 || index !in current.indices) return
+        val updated = current.toMutableList().apply { removeAt(index) }
+        _presetColors.value = updated
+        if (_selectedPresetIndex.value == index) {
+            _selectedPresetIndex.value = null
+        }
+    }
+
+    fun setSnappedBrushSize(rawSize: Float, step: Float = 2f) {
+        val snapped = (kotlin.math.round(rawSize / step) * step).coerceIn(2f, 24f)
+        _activeBrush.update { it.copy(baseSize = snapped) }
+    }
+
+    fun onStrokeCommitted(stroke: Stroke) {
+        val currentList = _strokes.value
+        pushUndoSnapshot(currentList)
+        _strokes.value = currentList + stroke
+        scheduleAutoSave(regenerateThumbnail = true)
+    }
+
+    fun eraseStrokesByIds(idsToRemove: Set<Long>) {
+        if (idsToRemove.isEmpty()) return
+        val currentList = _strokes.value
+        val filtered = currentList.filterNot { it.id in idsToRemove }
+        if (filtered.size != currentList.size) {
+            pushUndoSnapshot(currentList)
+            _strokes.value = filtered
+            scheduleAutoSave(regenerateThumbnail = true)
+        }
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        val previous = undoStack.removeLast()
+        _strokes.value = previous
+        _canUndo.value = undoStack.isNotEmpty()
+        _selectedStrokeIds.value = emptySet()
+        scheduleAutoSave(regenerateThumbnail = true)
+    }
+
+    fun onTransform(
+        panX: Float,
+        panY: Float,
+        zoom: Float,
+        centroidX: Float,
+        centroidY: Float
+    ) {
+        _viewportState.update { state ->
+            val effectiveZoom = if (_isZoomLocked.value) 1.0 else zoom.toDouble()
+            val newScale = (state.scale * effectiveZoom).coerceIn(0.15, 8.0)
+            val actualZoom = newScale / state.scale
+
+            val newOffsetX = centroidX - (centroidX - state.offsetX) * actualZoom + panX
+            val newOffsetY = centroidY - (centroidY - state.offsetY) * actualZoom + panY
+
+            state.copy(
+                offsetX = newOffsetX,
+                offsetY = newOffsetY,
+                scale = newScale
+            )
+        }
+        scheduleAutoSave(regenerateThumbnail = false)
+    }
+
+    fun toggleZoomLock() {
+        _isZoomLocked.update { !it }
+    }
+
+    fun resetViewport() {
+        _viewportState.value = ViewportState()
+        scheduleAutoSave(regenerateThumbnail = false)
+    }
+
+    private fun pushUndoSnapshot(snapshot: List<Stroke>) {
+        if (undoStack.size >= 40) {
+            undoStack.removeFirst()
+        }
+        undoStack.addLast(snapshot)
+        _canUndo.value = true
+    }
+
+    @SuppressLint("EmptySuperCall")
+    override fun onCleared() {
+        super.onCleared()
+        if (hasUnsavedChanges) {
+            flushSaveAndThumbnail()
+        }
     }
 }

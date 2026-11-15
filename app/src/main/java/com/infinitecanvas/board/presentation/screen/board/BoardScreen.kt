@@ -7,19 +7,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardBottomHud
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardTopBar
 import com.infinitecanvas.board.presentation.screen.board.huds.CanvasLayer
 
 @Composable
 fun BoardScreen(
-    viewModel: BoardViewModel = viewModel()
+    boardId: Long,
+    viewModel: BoardViewModel,
+    onNavigateBack: () -> Unit
 ) {
     val activeTool by viewModel.activeTool.collectAsState()
     val activeBrush by viewModel.activeBrush.collectAsState()
@@ -30,6 +32,16 @@ fun BoardScreen(
     val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
     val viewportState by viewModel.viewportState.collectAsState()
+
+    LaunchedEffect(boardId) {
+        viewModel.openBoard(boardId)
+    }
+
+    val handleExit: () -> Unit = {
+        viewModel.flushSaveAndThumbnail {
+            onNavigateBack()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         CanvasLayer(
@@ -56,7 +68,8 @@ fun BoardScreen(
             onSelectPresetIndex = { viewModel.selectPresetIndex(it) },
             onRemovePresetColor = { viewModel.removePresetColor(it) },
             onUpdatePresetColor = { index, color -> viewModel.updatePresetColorAt(index, color) },
-            onPinColor = { viewModel.pinCurrentColor(it) }
+            onPinColor = { viewModel.pinCurrentColor(it) },
+            onNavigateBack = handleExit
         )
 
         BoardBottomHud(

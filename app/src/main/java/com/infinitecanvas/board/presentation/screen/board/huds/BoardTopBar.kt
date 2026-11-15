@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.FilterChip
@@ -46,7 +47,8 @@ internal fun BoardTopBar(
     onRemovePresetColor: (Int) -> Unit,
     onUpdatePresetColor: (Int, Int) -> Unit,
     onPinColor: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateBack: () -> Unit
 ) {
     Surface(
         modifier = modifier,
@@ -59,6 +61,16 @@ internal fun BoardTopBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                onClick = onNavigateBack,
+                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back_to_boards)
+                )
+            }
+
             BrushSelector(
                 activeTool = activeTool,
                 activeBrush = activeBrush,

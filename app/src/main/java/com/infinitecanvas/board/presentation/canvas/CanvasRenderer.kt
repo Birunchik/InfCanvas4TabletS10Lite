@@ -6,8 +6,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.infinitecanvas.board.domain.model.ViewportState
-import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.round
 
 fun DrawScope.drawCachedGeometry(geom: CachedStrokeGeometry) {
     val dotCenter = geom.singleDotCenter
@@ -63,24 +63,31 @@ fun DrawScope.drawBatchedWorldGrid(
     minorGridPath.reset()
     majorGridPath.reset()
 
+    // --- Отрисовка вертикальных линий (по оси X) ---
     var currentX = firstGridX
     while (currentX <= worldRight) {
         val screenX = viewportState.worldToScreenX(currentX)
-        val isMajor = abs(currentX % majorStep) < (fixedStep * 0.01) ||
-                abs((currentX % majorStep) - majorStep) < (fixedStep * 0.01)
 
-        val target = if (isMajor) majorGridPath else minorGridPath
+        // Определяем индекс линии с помощью округления, защищаясь от погрешностей Double
+        val gridIndexX = round(currentX / fixedStep).toInt()
+        val isMajorX = gridIndexX % 5 == 0
+
+        val target = if (isMajorX) majorGridPath else minorGridPath
         target.moveTo(screenX, 0f)
         target.lineTo(screenX, canvasHeight)
         currentX += effectiveStep
     }
 
+    // --- Отрисовка горизонтальных линий (по оси Y) ---
     var currentY = firstGridY
     while (currentY <= worldBottom) {
         val screenY = viewportState.worldToScreenY(currentY)
-        val isMajor = abs(currentY % majorStep) < (majorStep * 0.01) // исправлено пропорционально
 
-        val target = if (isMajor) majorGridPath else minorGridPath
+        // Аналогично для оси Y
+        val gridIndexY = round(currentY / fixedStep).toInt()
+        val isMajorY = gridIndexY % 5 == 0
+
+        val target = if (isMajorY) majorGridPath else minorGridPath
         target.moveTo(0f, screenY)
         target.lineTo(canvasWidth, screenY)
         currentY += effectiveStep

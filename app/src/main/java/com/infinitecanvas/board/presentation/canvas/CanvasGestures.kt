@@ -1,28 +1,36 @@
 package com.infinitecanvas.board.presentation.canvas
 
-import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.PointerInputChange
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import kotlin.math.hypot
 
-
-// Утилиты фильтрации точек
+/**
+    Добавляет отфильтрованные по расстоянию точки в target и, если передан incrementalPath,
+    достраивает его инкрементально в мировых координатах без пересборки с нуля.
+ */
 internal fun appendFilteredPoints(
     change: PointerInputChange,
     viewport: ViewportState,
-    target: MutableList<StrokePoint>
+    target: MutableList<StrokePoint>,
+    minStepPx: Double = 1.2,
+    incrementalPath: Path? = null
 ): Boolean {
     var added = false
-    val minDistWorld = 1.2 / viewport.scale.coerceAtLeast(0.25)
+    val minDistWorld = minStepPx / viewport.scale.coerceAtLeast(0.25)
     val basePressure = change.pressure.coerceIn(0.05f, 1f)
 
     for (historical in change.historical) {
         val wx = viewport.screenToWorldX(historical.position.x)
         val wy = viewport.screenToWorldY(historical.position.y)
         if (shouldAddPoint(target, wx, wy, minDistWorld)) {
+            if (incrementalPath != null) {
+                if (target.isEmpty()) incrementalPath.moveTo(wx.toFloat(), wy.toFloat())
+                else incrementalPath.lineTo(wx.toFloat(), wy.toFloat())
+            }
             target.add(StrokePoint(wx, wy, basePressure))
             added = true
         }
@@ -31,6 +39,10 @@ internal fun appendFilteredPoints(
     val wx = viewport.screenToWorldX(change.position.x)
     val wy = viewport.screenToWorldY(change.position.y)
     if (shouldAddPoint(target, wx, wy, minDistWorld)) {
+        if (incrementalPath != null) {
+            if (target.isEmpty()) incrementalPath.moveTo(wx.toFloat(), wy.toFloat())
+            else incrementalPath.lineTo(wx.toFloat(), wy.toFloat())
+        }
         target.add(StrokePoint(wx, wy, basePressure))
         added = true
     }

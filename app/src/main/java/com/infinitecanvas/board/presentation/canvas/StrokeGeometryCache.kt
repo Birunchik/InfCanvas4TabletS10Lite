@@ -37,6 +37,38 @@ class StrokeGeometryCache {
         cache[stroke.id] = built
         return built
     }
+
+    /**
+     * Мгновенно сдвигает закэшированные Path и границы выделенных штрихов на уровне Skia
+     * без повторной тесселяции точек при завершении перетаскивания лассо.
+     */
+    fun shiftCachedStrokes(ids: Set<Long>, dx: Double, dy: Double) {
+        if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
+        val offset = Offset(dx.toFloat(), dy.toFloat())
+
+        for (id in ids) {
+            val existing = cache[id] ?: continue
+            val shiftedBounds = WorldBounds(
+                minX = existing.bounds.minX + dx,
+                minY = existing.bounds.minY + dy,
+                maxX = existing.bounds.maxX + dx,
+                maxY = existing.bounds.maxY + dy
+            )
+            val shiftedDot = existing.singleDotCenter?.plus(offset)
+            if (shiftedDot == null) {
+                existing.path.translate(offset)
+            }
+            cache[id] = CachedStrokeGeometry(
+                bounds = shiftedBounds,
+                path = existing.path,
+                color = existing.color,
+                isFilledPolygon = existing.isFilledPolygon,
+                strokeWidth = existing.strokeWidth,
+                singleDotCenter = shiftedDot,
+                singleDotRadius = existing.singleDotRadius
+            )
+        }
+    }
 }
 
 fun buildGeometry(

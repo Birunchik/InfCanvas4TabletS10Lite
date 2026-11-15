@@ -2,14 +2,18 @@ package com.infinitecanvas.board.presentation.screen.board
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.CanvasTool
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
 
@@ -249,5 +253,62 @@ private val _selectedPresetIndex = MutableStateFlow<Int?>(0)
         if (ids.isEmpty()) return
         eraseStrokesByIds(ids)
         _selectedStrokeIds.value = emptySet()
+    }
+
+    // Буфер обмена для копирования и вставки выделенных лассо штрихов
+    private val _clipboardStrokes = MutableStateFlow<List<Stroke>>(emptyList())
+    val hasClipboardContent: StateFlow<Boolean> = _clipboardStrokes
+        .map { it.isNotEmpty() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
+        )
+
+    private var pasteCascadeCount = 0
+
+    /**
+     * Копирует текущие выделенные штрихи во внутренний буфер обмена доски.
+     */
+    fun copySelectedStrokes() {
+        val ids = _selectedStrokeIds.value
+        if (ids.isEmpty()) return
+
+        val copied = _strokes.value.filter { it.id in ids }
+        if (copied.isNotEmpty()) {
+            _clipboardStrokes.value = copied
+            pasteCascadeCount = 0
+        }
+    }
+
+    /**
+     * Вставляет штрихи из буфера обмена на холст со смещением,
+     * сохраняет снимок в Undo и автоматически выделяет вставленную группу.
+     */
+    /**
+     * Вставляет штрихи из буфера обмена на холст со смещением,
+     * сохраняет снимок в Undo и автоматически выделяет вставленную группу,
+     * не изменяя текущий активный инструмент.
+     */
+    fun pasteClipboardStrokes() {
+        val clipboard = _clipboardStrokes.value
+        if (clipboard.isEmpty()) return
+
+        pasteCascadeCount++
+        val offsetStep = 28.0 * pasteCascadeCount
+        val baseId = System.nanoTime()
+
+        val pastedStrokes = clipboard.mapIndexed { index, stroke ->
+            stroke
+                .translated(offsetStep, offsetStep)
+                .copy(id = baseId + index + 1L)
+        }
+
+        val currentList = _strokes.value
+        pushUndoSnapshot(currentList)
+        _strokes.value = currentList + pastedStrokes
+
+        // Выделяем вставленные объекты, оставляя activeTool неизменным
+        _selectedStrokeIds.value = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
     }
 }

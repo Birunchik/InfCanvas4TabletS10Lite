@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -78,6 +80,7 @@ fun BoardScreen(
     val selectedPresetIndex by viewModel.selectedPresetIndex.collectAsState()
     val isZoomLocked by viewModel.isZoomLocked.collectAsState()
     val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
+    val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
 
     val viewportState by viewModel.viewportState.collectAsState()
 
@@ -117,10 +120,13 @@ fun BoardScreen(
             zoom = viewportState.scale,
             isZoomLocked = isZoomLocked,
             selectedCount = selectedStrokeIds.size,
-            onDeleteSelected = { viewModel.deleteSelectedStrokes() },
-            onClearSelection = { viewModel.clearSelection() },
+            hasClipboardContent = hasClipboardContent,
             onToggleZoomLock = { viewModel.toggleZoomLock() },
-            onResetZoom = viewModel::resetViewport
+            onResetZoom = viewModel::resetViewport,
+            onCopySelected = { viewModel.copySelectedStrokes() },
+            onPasteClipboard = { viewModel.pasteClipboardStrokes() },
+            onDeleteSelected = { viewModel.deleteSelectedStrokes() },
+            onClearSelection = { viewModel.clearSelection() }
         )
     }
 }
@@ -523,8 +529,11 @@ private fun BoardBottomHud(
     zoom: Double,
     isZoomLocked: Boolean,
     selectedCount: Int,
+    hasClipboardContent: Boolean,
     onToggleZoomLock: () -> Unit,
     onResetZoom: () -> Unit,
+    onCopySelected: () -> Unit,
+    onPasteClipboard: () -> Unit,
     onDeleteSelected: () -> Unit,
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier
@@ -538,10 +547,21 @@ private fun BoardBottomHud(
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Кнопки управления выделением (показываются только при активном выделении)
+            // Кнопки управления выделением (Копировать, Удалить, Снять выделение)
             if (selectedCount > 0) {
+                IconButton(
+                    onClick = onCopySelected,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = stringResource(R.string.action_copy_selected),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 IconButton(
                     onClick = onDeleteSelected,
                     modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
@@ -562,9 +582,26 @@ private fun BoardBottomHud(
                         contentDescription = stringResource(R.string.action_clear_selection)
                     )
                 }
+            }
 
+            // Кнопка Вставить (доступна всегда, пока в буфере есть скопированные штрихи)
+            if (hasClipboardContent) {
+                IconButton(
+                    onClick = onPasteClipboard,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = stringResource(R.string.action_paste_clipboard),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            if (selectedCount > 0 || hasClipboardContent) {
                 HorizontalDivider(
                     modifier = Modifier
+                        .padding(horizontal = 4.dp)
                         .width(1.dp)
                         .height(24.dp),
                     thickness = DividerDefaults.Thickness,
@@ -578,7 +615,6 @@ private fun BoardBottomHud(
                 style = MaterialTheme.typography.labelLarge
             )
 
-            // Кнопка блокировки зума
             IconButton(
                 onClick = onToggleZoomLock,
                 modifier = Modifier.size(36.dp)

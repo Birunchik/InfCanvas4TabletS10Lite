@@ -7,6 +7,13 @@
     <string name="tool_eraser">Ластик</string>
     <string name="tool_lasso">Лассо</string>
 
+    <string name="action_open_palette">Открыть палитру</string>
+    <string name="action_pin_color">Закрепить цвет</string>
+    <string name="action_delete_color">Удалить цвет</string>
+    <string name="color_slider_hue">Цвет</string>
+    <string name="color_slider_saturation">Насыщенность</string>
+    <string name="color_slider_value">Яркость</string>
+
     <string name="action_undo">Отменить</string>
     <string name="action_clear">Очистить</string>
     <string name="action_reset_zoom">100%</string>

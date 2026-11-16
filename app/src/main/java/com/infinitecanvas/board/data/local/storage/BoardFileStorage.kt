@@ -1,6 +1,7 @@
 package com.infinitecanvas.board.data.local.storage
 
 import android.content.Context
+import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
@@ -17,6 +18,9 @@ import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+  Высокоскоростное бинарное хранилище геометрии досок и метаданных изображений.
+ */
 class BoardFileStorage(context: Context) {
 
     private val boardsDir = File(context.filesDir, "boards").apply { mkdirs() }
@@ -24,6 +28,7 @@ class BoardFileStorage(context: Context) {
 
     data class StoredCanvasPayload(
         val strokes: List<Stroke>,
+        val images: List<BoardImage>,
         val viewport: ViewportState
     )
 
@@ -34,6 +39,7 @@ class BoardFileStorage(context: Context) {
     suspend fun writeBoardPayload(
         boardId: Long,
         strokes: List<Stroke>,
+        images: List<BoardImage>,
         viewport: ViewportState
     ) = withContext(Dispatchers.IO) {
         val targetFile = getBoardFile(boardId)
@@ -54,19 +60,16 @@ class BoardFileStorage(context: Context) {
                 val s = strokes[i]
                 out.writeLong(s.id)
 
-                // Кисть
                 out.writeInt(s.brush.type.ordinal)
                 out.writeInt(s.brush.colorArgb)
                 out.writeFloat(s.brush.baseSize)
                 out.writeFloat(s.brush.opacity)
 
-                // Предвычисленный WorldBounds (чтобы не пересчитывать при загрузке)
                 out.writeDouble(s.bounds.minX)
                 out.writeDouble(s.bounds.minY)
                 out.writeDouble(s.bounds.maxX)
                 out.writeDouble(s.bounds.maxY)
 
-                // Точки штриха
                 val pts = s.points
                 out.writeInt(pts.size)
                 for (j in pts.indices) {
@@ -76,6 +79,21 @@ class BoardFileStorage(context: Context) {
                     out.writeFloat(p.pressure)
                 }
             }
+
+            // Изображения (добавлено в v2, флаг isPinned в v3)
+            out.writeInt(images.size)
+            for (i in images.indices) {
+                val img = images[i]
+                out.writeLong(img.id)
+                out.writeUTF(img.fileName)
+                out.writeDouble(img.bounds.minX)
+                out.writeDouble(img.bounds.minY)
+                out.writeDouble(img.bounds.maxX)
+                out.writeDouble(img.bounds.maxY)
+                out.writeInt(img.zIndex)
+                out.writeBoolean(img.isPinned)
+            }
+
             out.flush()
         }
 
@@ -88,17 +106,17 @@ class BoardFileStorage(context: Context) {
     suspend fun readBoardPayload(boardId: Long): StoredCanvasPayload = withContext(Dispatchers.IO) {
         val file = getBoardFile(boardId)
         if (!file.exists() || file.length() == 0L) {
-            return@withContext StoredCanvasPayload(emptyList(), ViewportState())
+            return@withContext StoredCanvasPayload(emptyList(), emptyList(), ViewportState())
         }
 
         DataInputStream(BufferedInputStream(FileInputStream(file), 32 * 1024)).use { input ->
             val magic = input.readInt()
             if (magic != MAGIC_HEADER) {
-                return@withContext StoredCanvasPayload(emptyList(), ViewportState())
+                return@withContext StoredCanvasPayload(emptyList(), emptyList(), ViewportState())
             }
             val version = input.readInt()
-            if (version != FORMAT_VERSION) {
-                return@withContext StoredCanvasPayload(emptyList(), ViewportState())
+            if (version !in 1..FORMAT_VERSION) {
+                return@withContext StoredCanvasPayload(emptyList(), emptyList(), ViewportState())
             }
 
             val viewport = ViewportState(
@@ -150,7 +168,31 @@ class BoardFileStorage(context: Context) {
                 )
             }
 
-            StoredCanvasPayload(strokes = strokes, viewport = viewport)
+            val images = if (version >= 2) {
+                val imageCount = input.readInt()
+                ArrayList<BoardImage>(imageCount).apply {
+                    for (i in 0 until imageCount) {
+                        add(
+                            BoardImage(
+                                id = input.readLong(),
+                                fileName = input.readUTF(),
+                                bounds = WorldBounds(
+                                    minX = input.readDouble(),
+                                    minY = input.readDouble(),
+                                    maxX = input.readDouble(),
+                                    maxY = input.readDouble()
+                                ),
+                                zIndex = input.readInt(),
+                                isPinned = version >= 3 && input.readBoolean()
+                            )
+                        )
+                    }
+                }
+            } else {
+                emptyList()
+            }
+
+            StoredCanvasPayload(strokes = strokes, images = images, viewport = viewport)
         }
     }
 
@@ -161,6 +203,6 @@ class BoardFileStorage(context: Context) {
 
     private companion object {
         const val MAGIC_HEADER = 0x49434231 // "ICB1"
-        const val FORMAT_VERSION = 1
+        const val FORMAT_VERSION = 3
     }
 }

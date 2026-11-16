@@ -8,9 +8,9 @@ data class BoardSummary(
     val thumbnailPath: String?,
     val strokesCount: Int
 )
-
 data class BoardDocument(
     val summary: BoardSummary,
     val strokes: List<Stroke>,
+    val images: List<BoardImage> = emptyList(),
     val viewport: ViewportState
 )

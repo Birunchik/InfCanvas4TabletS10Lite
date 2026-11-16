@@ -10,6 +10,7 @@ import coil.ImageLoader
 import coil.memory.MemoryCache
 import com.infinitecanvas.board.data.local.db.AppDatabase
 import com.infinitecanvas.board.data.local.storage.BoardFileStorage
+import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
 import com.infinitecanvas.board.data.repository.BoardRepositoryImpl
 import com.infinitecanvas.board.presentation.navigation.AppNavHost
@@ -31,17 +32,23 @@ class MainActivity : ComponentActivity() {
 
         val database = AppDatabase.getInstance(applicationContext)
         val fileStorage = BoardFileStorage(applicationContext)
-        val thumbnailGenerator = ThumbnailGenerator(fileStorage)
+        val imageAssetStorage = ImageAssetStorage(applicationContext)
+        val thumbnailGenerator = ThumbnailGenerator(
+            fileStorage = fileStorage,
+            imageAssetStorage = imageAssetStorage
+        )
         val repository = BoardRepositoryImpl(
             dao = database.boardDao(),
-            fileStorage = fileStorage
+            fileStorage = fileStorage,
+            imageAssetStorage = imageAssetStorage
         )
 
         setContent {
             MaterialTheme {
                 AppNavHost(
                     repository = repository,
-                    thumbnailGenerator = thumbnailGenerator
+                    thumbnailGenerator = thumbnailGenerator,
+                    imageAssetStorage = imageAssetStorage
                 )
             }
         }

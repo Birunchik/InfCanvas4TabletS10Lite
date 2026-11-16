@@ -4,7 +4,9 @@ import com.infinitecanvas.board.data.local.db.BoardDao
 import com.infinitecanvas.board.data.local.db.BoardEntity
 import com.infinitecanvas.board.data.local.db.FolderEntity
 import com.infinitecanvas.board.data.local.storage.BoardFileStorage
+import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.domain.model.BoardDocument
+import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.domain.model.Stroke
@@ -15,7 +17,8 @@ import kotlinx.coroutines.flow.map
 
 class BoardRepositoryImpl(
     private val dao: BoardDao,
-    private val fileStorage: BoardFileStorage
+    private val fileStorage: BoardFileStorage,
+    private val imageAssetStorage: ImageAssetStorage
 ) : BoardRepository {
 
     override fun observeFolders(): Flow<List<Folder>> =
@@ -56,7 +59,7 @@ class BoardRepositoryImpl(
                 updatedAt = now
             )
         )
-        fileStorage.writeBoardPayload(id, emptyList(), ViewportState())
+        fileStorage.writeBoardPayload(id, emptyList(), emptyList(), ViewportState())
         return id
     }
 
@@ -66,6 +69,7 @@ class BoardRepositoryImpl(
         return BoardDocument(
             summary = entity.toDomain(),
             strokes = payload.strokes,
+            images = payload.images,
             viewport = payload.viewport
         )
     }
@@ -73,10 +77,11 @@ class BoardRepositoryImpl(
     override suspend fun saveBoardContent(
         boardId: Long,
         strokes: List<Stroke>,
+        images: List<BoardImage>,
         viewport: ViewportState,
         thumbnailPath: String?
     ) {
-        fileStorage.writeBoardPayload(boardId, strokes, viewport)
+        fileStorage.writeBoardPayload(boardId, strokes, images, viewport)
         dao.updateBoardStats(
             boardId = boardId,
             updatedAt = System.currentTimeMillis(),
@@ -96,5 +101,6 @@ class BoardRepositoryImpl(
     override suspend fun deleteBoard(boardId: Long) {
         dao.deleteBoard(boardId)
         fileStorage.deleteBoardFiles(boardId)
+        imageAssetStorage.deleteAllBoardAssets(boardId)
     }
 }

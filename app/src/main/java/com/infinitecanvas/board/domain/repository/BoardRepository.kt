@@ -1,6 +1,7 @@
 package com.infinitecanvas.board.domain.repository
 
 import com.infinitecanvas.board.domain.model.BoardDocument
+import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.domain.model.Stroke
@@ -22,6 +23,7 @@ interface BoardRepository {
     suspend fun saveBoardContent(
         boardId: Long,
         strokes: List<Stroke>,
+        images: List<BoardImage>,
         viewport: ViewportState,
         thumbnailPath: String? = null
     )

@@ -90,11 +90,11 @@ data class Stroke(
             var maxX = Double.NEGATIVE_INFINITY
             var maxY = Double.NEGATIVE_INFINITY
 
-            for (p in points) {
-                minX = min(minX, p.x)
-                minY = min(minY, p.y)
-                maxX = max(maxX, p.x)
-                maxY = max(maxY, p.y)
+            for ((x, y) in points) {
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxX = max(maxX, x)
+                maxY = max(maxY, y)
             }
 
             return Stroke(

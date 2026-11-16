@@ -1,10 +1,14 @@
 package com.infinitecanvas.board.data.local.storage
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
+import android.os.Build
+import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
@@ -19,25 +23,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.core.graphics.createBitmap
 
-/**
- * Генерирует лёгкую WebP-миниатюру содержимого доски (480x300, 16:10 под Tab S10 Lite)
- * в фоновом потоке, автоматически центрируя и масштабируя все нарисованные штрихи.
- */
 class ThumbnailGenerator(
-    private val fileStorage: BoardFileStorage
+    private val fileStorage: BoardFileStorage,
+    private val imageAssetStorage: ImageAssetStorage
 ) {
     suspend fun generateAndSave(
         boardId: Long,
-        strokes: List<Stroke>
+        strokes: List<Stroke>,
+        images: List<BoardImage> = emptyList()
     ): String? = withContext(Dispatchers.Default) {
         val outFile = fileStorage.getThumbnailFile(boardId)
 
-        if (strokes.isEmpty()) {
+        if (strokes.isEmpty() && images.isEmpty()) {
             if (outFile.exists()) outFile.delete()
             return@withContext null
         }
 
-        // 1. Вычисляем общий ограничивающий прямоугольник всех штрихов
+        // 1. Вычисляем общий WorldBounds по штрихам И изображениям
         var minX = Double.POSITIVE_INFINITY
         var minY = Double.POSITIVE_INFINITY
         var maxX = Double.NEGATIVE_INFINITY
@@ -45,6 +47,13 @@ class ThumbnailGenerator(
 
         for (i in strokes.indices) {
             val b = strokes[i].bounds
+            if (b.minX < minX) minX = b.minX
+            if (b.minY < minY) minY = b.minY
+            if (b.maxX > maxX) maxX = b.maxX
+            if (b.maxY > maxY) maxY = b.maxY
+        }
+        for (i in images.indices) {
+            val b = images[i].bounds
             if (b.minX < minX) minX = b.minX
             if (b.minY < minY) minY = b.minY
             if (b.maxX > maxX) maxX = b.maxX
@@ -59,11 +68,9 @@ class ThumbnailGenerator(
         val bitmap = createBitmap(THUMB_WIDTH, THUMB_HEIGHT)
         try {
             val canvas = Canvas(bitmap)
-            // Светлый фон холста с лёгкой сеткой
             canvas.drawColor(0xFFF8F9FA.toInt())
             drawSubtleGrid(canvas)
 
-            // 2. Рассчитываем масштаб с отступами по краям (padding)
             val usableW = THUMB_WIDTH - PADDING_PX * 2f
             val usableH = THUMB_HEIGHT - PADDING_PX * 2f
             val scale = min(usableW / contentW.toFloat(), usableH / contentH.toFloat())
@@ -78,6 +85,30 @@ class ThumbnailGenerator(
             canvas.translate(offsetX, offsetY)
             canvas.scale(scale, scale)
 
+            // 2. Сначала рисуем изображения (под штрихами)
+            val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+            val dstRect = RectF()
+            val sampleOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+
+            for (i in images.indices) {
+                val img = images[i]
+                val file = imageAssetStorage.getImageFile(boardId, img.fileName)
+                if (!file.exists()) continue
+                val subBitmap = BitmapFactory.decodeFile(file.absolutePath, sampleOpts) ?: continue
+                try {
+                    dstRect.set(
+                        img.bounds.minX.toFloat(),
+                        img.bounds.minY.toFloat(),
+                        img.bounds.maxX.toFloat(),
+                        img.bounds.maxY.toFloat()
+                    )
+                    canvas.drawBitmap(subBitmap, null, dstRect, bitmapPaint)
+                } finally {
+                    subBitmap.recycle()
+                }
+            }
+
+            // 3. Поверх изображений рисуем штрихи
             val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeCap = Paint.Cap.ROUND
@@ -100,7 +131,6 @@ class ThumbnailGenerator(
             }
             canvas.restore()
 
-            // 3. Сохраняем сжатый WebP во временный файл и атомарно заменяем
             withContext(Dispatchers.IO) {
                 val tempFile = File(outFile.parentFile, "${outFile.name}.tmp")
                 FileOutputStream(tempFile).use { fos ->
@@ -150,12 +180,10 @@ class ThumbnailGenerator(
         val brush = stroke.brush
 
         val alphaFactor = if (brush.type == BrushType.PENCIL) 0.45f else 1f
-        val finalAlpha = ((Color.alpha(brush.colorArgb) * brush.opacity * alphaFactor))
+        val finalAlpha = (Color.alpha(brush.colorArgb) * brush.opacity * alphaFactor)
             .toInt()
             .coerceIn(25, 255)
         val colorWithAlpha = (brush.colorArgb and 0x00FFFFFF) or (finalAlpha shl 24)
-
-        // Минимальная видимая толщина на миниатюре, чтобы тонкие линии не пропадали при сильном уменьшении
         val minVisibleWidth = 1.35f * invScale
 
         if (points.size == 1) {

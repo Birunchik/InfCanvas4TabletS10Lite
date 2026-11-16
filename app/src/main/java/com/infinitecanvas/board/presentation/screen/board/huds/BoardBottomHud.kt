@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -36,12 +38,16 @@ internal fun BoardBottomHud(
     zoom: Double,
     isZoomLocked: Boolean,
     selectedCount: Int,
+    hasSelectedImage: Boolean,
     hasClipboardContent: Boolean,
+    isSelectedImagePinned: Boolean,
+    onTogglePinSelectedImage: () -> Unit,
     onToggleZoomLock: () -> Unit,
     onResetZoom: () -> Unit,
     onCopySelected: () -> Unit,
     onPasteClipboard: () -> Unit,
     onDeleteSelected: () -> Unit,
+    onDeleteSelectedImage: () -> Unit,
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -90,6 +96,40 @@ internal fun BoardBottomHud(
                 }
             }
 
+            if (hasSelectedImage) {
+                IconButton(
+                    onClick = onTogglePinSelectedImage,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSelectedImagePinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = if (isSelectedImagePinned) "Открепить изображение" else "Закрепить поверх экрана",
+                        tint = if (isSelectedImagePinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                IconButton(
+                    onClick = onDeleteSelectedImage,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.action_delete_image),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                IconButton(
+                    onClick = onClearSelection,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.action_clear_selection)
+                    )
+                }
+            }
+
             if (hasClipboardContent) {
                 IconButton(
                     onClick = onPasteClipboard,
@@ -103,7 +143,7 @@ internal fun BoardBottomHud(
                 }
             }
 
-            if (selectedCount > 0 || hasClipboardContent) {
+            if (selectedCount > 0 || hasSelectedImage || hasClipboardContent) {
                 HorizontalDivider(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -115,10 +155,6 @@ internal fun BoardBottomHud(
             }
 
             val zoomPercent = (zoom * 100).roundToInt()
-            Text(
-                text = stringResource(R.string.hud_status_format, zoomPercent),
-                style = MaterialTheme.typography.labelLarge
-            )
 
             IconButton(
                 onClick = onToggleZoomLock,
@@ -134,9 +170,12 @@ internal fun BoardBottomHud(
 
             FilledTonalButton(
                 onClick = onResetZoom,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                modifier = Modifier.defaultMinSize(minWidth = 72.dp, minHeight = 48.dp)
             ) {
-                Text(stringResource(R.string.action_reset_zoom))
+                Text(
+                    text = "$zoomPercent%",
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }

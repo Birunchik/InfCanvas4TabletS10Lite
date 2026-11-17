@@ -3,14 +3,13 @@ package com.infinitecanvas.board.domain.spatial
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
-import com.infinitecanvas.board.presentation.canvas.HIGHLIGHTER_WIDTH_MULTIPLIER
+import com.infinitecanvas.board.presentation.canvas.renderer.HIGHLIGHTER_WIDTH_MULTIPLIER
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Пространственный индекс Quadtree для быстрого поиска штрихов в видимой области
- * и мгновенного определения пересечений с ластиком.
+  Пространственный индекс Quadtree для быстрого поиска штрихов в видимой области
  */
 class Quadtree private constructor(
     private val root: Node
@@ -61,7 +60,6 @@ class Quadtree private constructor(
      * Возвращает ID штрихов, задетых круглой областью ластика в точке ([worldX], [worldY]).
      */
     fun findHitStrokeIds(worldX: Double, worldY: Double, eraserRadius: Double): Set<Long> {
-        // Расширяем область поиска на максимальную полуширину маркера, чтобы цеплять его за края
         val maxHalfStrokePadding = 24.0 * HIGHLIGHTER_WIDTH_MULTIPLIER * 0.5
         val searchArea = WorldBounds.fromCenter(worldX, worldY, eraserRadius + maxHalfStrokePadding)
         val candidates = ArrayList<Stroke>(16)

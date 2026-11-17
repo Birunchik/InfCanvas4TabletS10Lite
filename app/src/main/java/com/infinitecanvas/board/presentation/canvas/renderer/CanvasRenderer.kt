@@ -1,23 +1,38 @@
-package com.infinitecanvas.board.presentation.canvas
+package com.infinitecanvas.board.presentation.canvas.renderer
 
+import android.graphics.Matrix
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
-import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.WorldBounds
-import kotlin.math.floor
-import kotlin.math.round
+import com.infinitecanvas.board.presentation.canvas.CachedStrokeGeometry
+
+const val HIGHLIGHTER_WIDTH_MULTIPLIER = 6.0f
+const val HIGHLIGHTER_CHISEL_ANGLE_DEG = -30f
 
 private val highlighterLayerPaint = Paint()
 
+private val forwardChiselMatrix = Matrix().apply {
+    postRotate(-HIGHLIGHTER_CHISEL_ANGLE_DEG)
+    postScale(1f, 4.5f)
+    postRotate(HIGHLIGHTER_CHISEL_ANGLE_DEG)
+}
+
+fun applyChiselForwardTransform(path: Path) {
+    path.asAndroidPath().transform(forwardChiselMatrix)
+}
+
+/**
+ * Отрисовка кэшированной геометрии штриха (точки, выделителя, пера или вариативных сегментов).
+ */
 fun DrawScope.drawCachedGeometry(
     geom: CachedStrokeGeometry,
     visibleWorldBounds: WorldBounds? = null
@@ -94,70 +109,5 @@ fun DrawScope.drawCachedGeometry(
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
-    )
-}
-
-fun DrawScope.drawBatchedWorldGrid(
-    viewportState: ViewportState,
-    worldLeft: Double,
-    worldTop: Double,
-    worldRight: Double,
-    worldBottom: Double,
-    canvasWidth: Float,
-    canvasHeight: Float,
-    gridColor: Color,
-    majorGridColor: Color,
-    minorGridPath: Path,
-    majorGridPath: Path
-) {
-    val fixedStep = 50.0
-    val majorStep = fixedStep * 5.0
-
-    val visibleColumns = (worldRight - worldLeft) / fixedStep
-    val effectiveStep = if (visibleColumns > 250.0) majorStep else fixedStep
-
-    val firstGridX = floor(worldLeft / effectiveStep) * effectiveStep
-    val firstGridY = floor(worldTop / effectiveStep) * effectiveStep
-
-    minorGridPath.reset()
-    majorGridPath.reset()
-
-    // --- Отрисовка вертикальных линий (по оси X) ---
-    var currentX = firstGridX
-    while (currentX <= worldRight) {
-        val screenX = viewportState.worldToScreenX(currentX)
-
-        val gridIndexX = round(currentX / fixedStep).toInt()
-        val isMajorX = gridIndexX % 5 == 0
-
-        val target = if (isMajorX) majorGridPath else minorGridPath
-        target.moveTo(screenX, 0f)
-        target.lineTo(screenX, canvasHeight)
-        currentX += effectiveStep
-    }
-
-    // --- Отрисовка горизонтальных линий (по оси Y) ---
-    var currentY = firstGridY
-    while (currentY <= worldBottom) {
-        val screenY = viewportState.worldToScreenY(currentY)
-
-        val gridIndexY = round(currentY / fixedStep).toInt()
-        val isMajorY = gridIndexY % 5 == 0
-
-        val target = if (isMajorY) majorGridPath else minorGridPath
-        target.moveTo(0f, screenY)
-        target.lineTo(canvasWidth, screenY)
-        currentY += effectiveStep
-    }
-
-    drawPath(
-        path = minorGridPath,
-        color = gridColor,
-        style = Stroke(width = 1f)
-    )
-    drawPath(
-        path = majorGridPath,
-        color = majorGridColor,
-        style = Stroke(width = 2f)
     )
 }

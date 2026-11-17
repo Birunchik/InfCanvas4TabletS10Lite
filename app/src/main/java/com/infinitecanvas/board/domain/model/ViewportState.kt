@@ -3,9 +3,9 @@ package com.infinitecanvas.board.domain.model
 import kotlin.math.max
 import kotlin.math.min
 data class ViewportState(
-    val offsetX: Double = 0.0, // Смещение камеры по X в мировых координатах
-    val offsetY: Double = 0.0, // Смещение камеры по Y в мировых координатах
-    val scale: Double = 1.0    // Коэффициент масштабирования (1.0 = 100%)
+    val offsetX: Double = 0.0,
+    val offsetY: Double = 0.0,
+    val scale: Double = 1.0
 ) {
     companion object {
         const val MIN_SCALE = 0.15  // 15%
@@ -15,11 +15,11 @@ data class ViewportState(
         }
     }
 
-    // Перевод экранных координат (px) в мировые координаты доски.
+    //экранные координаты (px) в мировые .
     fun screenToWorldX(screenX: Float): Double = (screenX - offsetX) / scale
     fun screenToWorldY(screenY: Float): Double = (screenY - offsetY) / scale
 
-    // Перевод мировых координат в экранные (px).
+    // мировые координаты в экранные (px).
     fun worldToScreenX(worldX: Double): Float = (worldX * scale + offsetX).toFloat()
     fun worldToScreenY(worldY: Double): Float = (worldY * scale + offsetY).toFloat()
 }

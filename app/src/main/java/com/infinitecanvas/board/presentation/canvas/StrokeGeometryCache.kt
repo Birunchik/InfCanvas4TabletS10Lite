@@ -3,19 +3,20 @@ package com.infinitecanvas.board.presentation.canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asAndroidPath
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.presentation.canvas.renderer.HIGHLIGHTER_WIDTH_MULTIPLIER
+import com.infinitecanvas.board.presentation.canvas.renderer.applyChiselForwardTransform
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-const val HIGHLIGHTER_WIDTH_MULTIPLIER = 6.0f
-const val HIGHLIGHTER_CHISEL_ANGLE_DEG = -30f
+private const val MAX_GEOMETRY_CACHE_ENTRIES = 1500
+private const val MAX_POOLED_BUFFER_CAPACITY = 2048
 
 class VariableStrokeSegment(
     val path: Path,
@@ -34,8 +35,58 @@ class CachedStrokeGeometry(
     val variableSegments: List<VariableStrokeSegment> = emptyList()
 )
 
+/**
+ * Потокобезопасный пул временных примитивных массивов для математических расчётов
+ * сглаживания и квантования, исключающий аллокации при рендеринге на 90 Гц.
+ */
+internal class GeometryScratchBuffers {
+    var xs1 = FloatArray(256)
+    var ys1 = FloatArray(256)
+    var xs2 = FloatArray(256)
+    var ys2 = FloatArray(256)
+
+    var rawWidths = FloatArray(256)
+    var cumulativeDist = FloatArray(256)
+    var forwardWidths = FloatArray(256)
+    var backwardWidths = FloatArray(256)
+
+    fun ensureCapacity(required: Int) {
+        if (xs1.size < required) {
+            val newCap = max(required, xs1.size * 2)
+            xs1 = FloatArray(newCap)
+            ys1 = FloatArray(newCap)
+            xs2 = FloatArray(newCap)
+            ys2 = FloatArray(newCap)
+            rawWidths = FloatArray(newCap)
+            cumulativeDist = FloatArray(newCap)
+            forwardWidths = FloatArray(newCap)
+            backwardWidths = FloatArray(newCap)
+        }
+    }
+
+    fun trimIfOversized() {
+        if (xs1.size > MAX_POOLED_BUFFER_CAPACITY) {
+            xs1 = FloatArray(256)
+            ys1 = FloatArray(256)
+            xs2 = FloatArray(256)
+            ys2 = FloatArray(256)
+            rawWidths = FloatArray(256)
+            cumulativeDist = FloatArray(256)
+            forwardWidths = FloatArray(256)
+            backwardWidths = FloatArray(256)
+        }
+    }
+}
+
+private val threadLocalScratchBuffers = ThreadLocal.withInitial { GeometryScratchBuffers() }
+
 class StrokeGeometryCache {
-    private val cache = HashMap<Long, CachedStrokeGeometry>(256)
+    // LRU-кэш (accessOrder = true): плавно вытесняет наиболее давно использованные штрихи
+    private val cache = object : LinkedHashMap<Long, CachedStrokeGeometry>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedStrokeGeometry>?): Boolean {
+            return size > MAX_GEOMETRY_CACHE_ENTRIES
+        }
+    }
 
     fun getOrBuild(stroke: Stroke): CachedStrokeGeometry {
         val existing = cache[stroke.id]
@@ -43,13 +94,16 @@ class StrokeGeometryCache {
             return existing
         }
 
-        if (cache.size > 1500) {
-            cache.clear()
-        }
-
         val built = buildGeometry(stroke, Path())
         cache[stroke.id] = built
         return built
+    }
+
+    fun removeStrokes(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        for (id in ids) {
+            cache.remove(id)
+        }
     }
 
     fun shiftCachedStrokes(ids: Set<Long>, dx: Double, dy: Double) {
@@ -133,8 +187,9 @@ fun buildGeometry(
     }
 
     targetPath.reset()
+    val n = rawPoints.size
 
-    if (rawPoints.size == 1) {
+    if (n == 1) {
         val p = rawPoints[0]
         if (isHighlighter) {
             targetPath.moveTo(p.x.toFloat(), p.y.toFloat())
@@ -158,96 +213,122 @@ fun buildGeometry(
         )
     }
 
-    val points = smoothSpineCoordinates(rawPoints)
+    val scratch = threadLocalScratchBuffers.get()!!
+    scratch.ensureCapacity(n)
 
-    return when (brush.type) {
-        BrushType.HIGHLIGHTER -> {
-            buildSmoothQuadraticPath(points, targetPath)
-            applyChiselForwardTransform(targetPath)
-            CachedStrokeGeometry(
-                bounds = effectiveBounds,
-                path = targetPath,
-                color = strokeColor,
-                isHighlighter = true,
-                strokeWidth = effectiveWidth
-            )
-        }
+    try {
+        smoothCoordinatesIntoScratch(rawPoints, n, scratch)
+        val sx = scratch.xs1
+        val sy = scratch.ys1
 
-        BrushType.BALLPOINT -> {
-            buildSmoothQuadraticPath(points, targetPath)
-            val avgPressure = points.fold(0f) { acc, pt -> acc + pt.pressure } / points.size
-            val width = calculateWidthForBrush(brush, avgPressure, 0f)
-            CachedStrokeGeometry(
-                bounds = effectiveBounds,
-                path = targetPath,
-                color = strokeColor,
-                isHighlighter = false,
-                strokeWidth = width
-            )
-        }
-
-        BrushType.FOUNTAIN -> {
-            val segments = buildQuantizedFountainSegments(points, brush)
-            CachedStrokeGeometry(
-                bounds = effectiveBounds,
-                path = targetPath,
-                color = strokeColor,
-                isHighlighter = false,
-                strokeWidth = 0f,
-                variableSegments = segments
-            )
-        }
-    }
-}
-
-private fun buildSmoothQuadraticPath(points: List<StrokePoint>, outPath: Path) {
-    outPath.moveTo(points[0].x.toFloat(), points[0].y.toFloat())
-    for (i in 1 until points.size) {
-        val prev = points[i - 1]
-        val curr = points[i]
-        val midX = ((prev.x + curr.x) * 0.5).toFloat()
-        val midY = ((prev.y + curr.y) * 0.5).toFloat()
-        outPath.quadraticTo(prev.x.toFloat(), prev.y.toFloat(), midX, midY)
-    }
-    val last = points.last()
-    outPath.lineTo(last.x.toFloat(), last.y.toFloat())
-}
-
-private fun smoothSpineCoordinates(raw: List<StrokePoint>): List<StrokePoint> {
-    if (raw.size < 3) return raw
-
-    var current = raw
-    repeat(2) {
-        val n = current.size
-        val nextList = ArrayList<StrokePoint>(n)
-        nextList.add(current[0])
-        for (i in 1 until n - 1) {
-            val prev = current[i - 1]
-            val curr = current[i]
-            val next = current[i + 1]
-            nextList.add(
-                StrokePoint(
-                    x = prev.x * 0.25 + curr.x * 0.5 + next.x * 0.25,
-                    y = prev.y * 0.25 + curr.y * 0.5 + next.y * 0.25,
-                    pressure = curr.pressure,
-                    timestampMs = curr.timestampMs
+        return when (brush.type) {
+            BrushType.HIGHLIGHTER -> {
+                buildSmoothQuadraticPathFromArrays(sx, sy, n, targetPath)
+                applyChiselForwardTransform(targetPath)
+                CachedStrokeGeometry(
+                    bounds = effectiveBounds,
+                    path = targetPath,
+                    color = strokeColor,
+                    isHighlighter = true,
+                    strokeWidth = effectiveWidth
                 )
-            )
+            }
+
+            BrushType.BALLPOINT -> {
+                buildSmoothQuadraticPathFromArrays(sx, sy, n, targetPath)
+                var pressureSum = 0f
+                for (i in 0 until n) {
+                    pressureSum += rawPoints[i].pressure
+                }
+                val width = calculateWidthForBrush(brush, pressureSum / n, 0f)
+                CachedStrokeGeometry(
+                    bounds = effectiveBounds,
+                    path = targetPath,
+                    color = strokeColor,
+                    isHighlighter = false,
+                    strokeWidth = width
+                )
+            }
+
+            BrushType.FOUNTAIN -> {
+                val segments = buildQuantizedFountainSegments(rawPoints, sx, sy, n, brush, scratch)
+                CachedStrokeGeometry(
+                    bounds = effectiveBounds,
+                    path = targetPath,
+                    color = strokeColor,
+                    isHighlighter = false,
+                    strokeWidth = 0f,
+                    variableSegments = segments
+                )
+            }
         }
-        nextList.add(current[n - 1])
-        current = nextList
+    } finally {
+        scratch.trimIfOversized()
     }
-    return current
+}
+
+private fun smoothCoordinatesIntoScratch(
+    raw: List<StrokePoint>,
+    n: Int,
+    scratch: GeometryScratchBuffers
+) {
+    val x1 = scratch.xs1
+    val y1 = scratch.ys1
+    for (i in 0 until n) {
+        val pt = raw[i]
+        x1[i] = pt.x.toFloat()
+        y1[i] = pt.y.toFloat()
+    }
+    if (n < 3) return
+
+    val x2 = scratch.xs2
+    val y2 = scratch.ys2
+
+    x2[0] = x1[0]
+    y2[0] = y1[0]
+    for (i in 1 until n - 1) {
+        x2[i] = x1[i - 1] * 0.25f + x1[i] * 0.50f + x1[i + 1] * 0.25f
+        y2[i] = y1[i - 1] * 0.25f + y1[i] * 0.50f + y1[i + 1] * 0.25f
+    }
+    x2[n - 1] = x1[n - 1]
+    y2[n - 1] = y1[n - 1]
+
+    for (i in 1 until n - 1) {
+        x1[i] = x2[i - 1] * 0.25f + x2[i] * 0.50f + x2[i + 1] * 0.25f
+        y1[i] = y2[i - 1] * 0.25f + y2[i] * 0.50f + y2[i + 1] * 0.25f
+    }
+}
+
+private fun buildSmoothQuadraticPathFromArrays(
+    xs: FloatArray,
+    ys: FloatArray,
+    n: Int,
+    outPath: Path
+) {
+    outPath.moveTo(xs[0], ys[0])
+    for (i in 1 until n) {
+        val prevX = xs[i - 1]
+        val prevY = ys[i - 1]
+        val currX = xs[i]
+        val currY = ys[i]
+        val midX = (prevX + currX) * 0.5f
+        val midY = (prevY + currY) * 0.5f
+        outPath.quadraticTo(prevX, prevY, midX, midY)
+    }
+    outPath.lineTo(xs[n - 1], ys[n - 1])
 }
 
 private fun buildQuantizedFountainSegments(
-    points: List<StrokePoint>,
-    brush: Brush
+    rawPoints: List<StrokePoint>,
+    xs: FloatArray,
+    ys: FloatArray,
+    n: Int,
+    brush: Brush,
+    scratch: GeometryScratchBuffers
 ): List<VariableStrokeSegment> {
-    val n = points.size
     if (n < 2) return emptyList()
 
-    val widths = computeSmoothedWidths(points, brush)
+    val widths = computeSmoothedWidthsInScratch(rawPoints, xs, ys, n, brush, scratch)
     val result = ArrayList<VariableStrokeSegment>(min(n, 32))
 
     val widthTolerance = max(0.32f, brush.baseSize * 0.08f)
@@ -263,7 +344,7 @@ private fun buildQuantizedFountainSegments(
 
         if ((pointsInSeg >= minPointsPerSegment && abs(w - currentBucketWidth) > widthTolerance) || isLast) {
             val avgWidth = (currentBucketWidth + w) * 0.5f
-            result.add(createSmoothSegmentFromRange(points, segStartIdx, i, avgWidth))
+            result.add(createSmoothSegmentFromArrays(xs, ys, segStartIdx, i, avgWidth))
             segStartIdx = i
             currentBucketWidth = w
         }
@@ -272,35 +353,40 @@ private fun buildQuantizedFountainSegments(
     return result
 }
 
-private fun createSmoothSegmentFromRange(
-    points: List<StrokePoint>,
+private fun createSmoothSegmentFromArrays(
+    xs: FloatArray,
+    ys: FloatArray,
     startIdx: Int,
     endIdx: Int,
     width: Float
 ): VariableStrokeSegment {
     val path = Path()
-    val p0 = points[startIdx]
-    path.moveTo(p0.x.toFloat(), p0.y.toFloat())
+    val x0 = xs[startIdx]
+    val y0 = ys[startIdx]
+    path.moveTo(x0, y0)
 
-    var minX = p0.x
-    var minY = p0.y
-    var maxX = p0.x
-    var maxY = p0.y
+    var minX = x0
+    var minY = y0
+    var maxX = x0
+    var maxY = y0
 
     for (i in (startIdx + 1)..endIdx) {
-        val prev = points[i - 1]
-        val curr = points[i]
-        minX = min(minX, curr.x)
-        minY = min(minY, curr.y)
-        maxX = max(maxX, curr.x)
-        maxY = max(maxY, curr.y)
+        val prevX = xs[i - 1]
+        val prevY = ys[i - 1]
+        val currX = xs[i]
+        val currY = ys[i]
+
+        if (currX < minX) minX = currX
+        if (currY < minY) minY = currY
+        if (currX > maxX) maxX = currX
+        if (currY > maxY) maxY = currY
 
         if (i == endIdx) {
-            path.lineTo(curr.x.toFloat(), curr.y.toFloat())
+            path.lineTo(currX, currY)
         } else {
-            val midX = ((prev.x + curr.x) * 0.5).toFloat()
-            val midY = ((prev.y + curr.y) * 0.5).toFloat()
-            path.quadraticTo(prev.x.toFloat(), prev.y.toFloat(), midX, midY)
+            val midX = (prevX + currX) * 0.5f
+            val midY = (prevY + currY) * 0.5f
+            path.quadraticTo(prevX, prevY, midX, midY)
         }
     }
 
@@ -308,25 +394,35 @@ private fun createSmoothSegmentFromRange(
     return VariableStrokeSegment(
         path = path,
         width = width,
-        bounds = WorldBounds(minX - pad, minY - pad, maxX + pad, maxY + pad)
+        bounds = WorldBounds(
+            minX = minX - pad,
+            minY = minY - pad,
+            maxX = maxX + pad,
+            maxY = maxY + pad
+        )
     )
 }
 
-private fun computeSmoothedWidths(
-    points: List<StrokePoint>,
-    brush: Brush
+private fun computeSmoothedWidthsInScratch(
+    rawPoints: List<StrokePoint>,
+    xs: FloatArray,
+    ys: FloatArray,
+    n: Int,
+    brush: Brush,
+    scratch: GeometryScratchBuffers
 ): FloatArray {
-    val n = points.size
-    val rawWidths = FloatArray(n)
+    val rawWidths = scratch.rawWidths
+    val cumDist = scratch.cumulativeDist
+    cumDist[0] = 0f
 
-    var smoothedPressure = points[0].pressure.coerceIn(0.05f, 1f)
+    var smoothedPressure = rawPoints[0].pressure.coerceIn(0.05f, 1f)
     var smoothedSpeed = 0f
     var windowStartIdx = 0
     var windowDist = 0f
 
     for (i in 0 until n) {
-        val curr = points[i]
-        val rawPressure = curr.pressure.coerceIn(0.05f, 1f)
+        val currPt = rawPoints[i]
+        val rawPressure = currPt.pressure.coerceIn(0.05f, 1f)
         smoothedPressure = if (i == 0) {
             rawPressure
         } else {
@@ -334,20 +430,24 @@ private fun computeSmoothedWidths(
         }
 
         if (i > 0) {
-            val prev = points[i - 1]
-            val segDist = hypot((curr.x - prev.x).toFloat(), (curr.y - prev.y).toFloat())
+            val segDist = hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            cumDist[i] = cumDist[i - 1] + segDist
             windowDist += segDist
 
-            if (curr.timestampMs > 0L && points[windowStartIdx].timestampMs > 0L) {
+            val currTs = currPt.timestampMs
+            val startTs = rawPoints[windowStartIdx].timestampMs
+            if (currTs > 0L && startTs > 0L) {
                 while (windowStartIdx < i - 1 &&
-                    (curr.timestampMs - points[windowStartIdx].timestampMs) > 45L
+                    (currTs - rawPoints[windowStartIdx].timestampMs) > 45L
                 ) {
-                    val a = points[windowStartIdx]
-                    val b = points[windowStartIdx + 1]
-                    windowDist = max(0f, windowDist - hypot((b.x - a.x).toFloat(), (b.y - a.y).toFloat()))
+                    val d = hypot(
+                        xs[windowStartIdx + 1] - xs[windowStartIdx],
+                        ys[windowStartIdx + 1] - ys[windowStartIdx]
+                    )
+                    windowDist = max(0f, windowDist - d)
                     windowStartIdx++
                 }
-                val windowDt = (curr.timestampMs - points[windowStartIdx].timestampMs).coerceAtLeast(16L)
+                val windowDt = (currTs - rawPoints[windowStartIdx].timestampMs).coerceAtLeast(16L)
                 val windowSpeed = windowDist / windowDt.toFloat()
                 smoothedSpeed = smoothedSpeed * 0.80f + windowSpeed * 0.20f
             } else {
@@ -361,31 +461,25 @@ private fun computeSmoothedWidths(
 
     if (n < 3) return rawWidths
 
-    val forward = FloatArray(n)
+    val forward = scratch.forwardWidths
     forward[0] = rawWidths[0]
     for (i in 1 until n) {
-        val dist = hypot(
-            (points[i].x - points[i - 1].x).toFloat(),
-            (points[i].y - points[i - 1].y).toFloat()
-        ).coerceAtLeast(0.5f)
+        val dist = (cumDist[i] - cumDist[i - 1]).coerceAtLeast(0.5f)
         val maxStep = dist * 0.42f
         val target = forward[i - 1] * 0.70f + rawWidths[i] * 0.30f
         forward[i] = target.coerceIn(forward[i - 1] - maxStep, forward[i - 1] + maxStep)
     }
 
-    val result = FloatArray(n)
-    result[n - 1] = forward[n - 1]
+    val backward = scratch.backwardWidths
+    backward[n - 1] = forward[n - 1]
     for (i in n - 2 downTo 0) {
-        val dist = hypot(
-            (points[i + 1].x - points[i].x).toFloat(),
-            (points[i + 1].y - points[i].y).toFloat()
-        ).coerceAtLeast(0.5f)
+        val dist = (cumDist[i + 1] - cumDist[i]).coerceAtLeast(0.5f)
         val maxStep = dist * 0.42f
-        val target = result[i + 1] * 0.65f + forward[i] * 0.35f
-        result[i] = target.coerceIn(result[i + 1] - maxStep, result[i + 1] + maxStep)
+        val target = backward[i + 1] * 0.65f + forward[i] * 0.35f
+        backward[i] = target.coerceIn(backward[i + 1] - maxStep, backward[i + 1] + maxStep)
     }
 
-    return result
+    return backward
 }
 
 fun calculateWidthForBrush(
@@ -410,15 +504,4 @@ fun calculateWidthForBrush(
             brush.baseSize * HIGHLIGHTER_WIDTH_MULTIPLIER
         }
     }.coerceAtLeast(0.5f)
-}
-
-private val forwardChiselMatrix = android.graphics.Matrix().apply {
-    // Поворачиваем ось наконечника на горизонталь, растягиваем по Y в 4.5 раза и возвращаем угол
-    postRotate(-HIGHLIGHTER_CHISEL_ANGLE_DEG)
-    postScale(1f, 4.5f)
-    postRotate(HIGHLIGHTER_CHISEL_ANGLE_DEG)
-}
-
-private fun applyChiselForwardTransform(path: Path) {
-    path.asAndroidPath().transform(forwardChiselMatrix)
 }

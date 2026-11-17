@@ -1,7 +1,9 @@
 package com.infinitecanvas.board.domain.spatial
 
+import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.presentation.canvas.HIGHLIGHTER_WIDTH_MULTIPLIER
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -18,9 +20,6 @@ class Quadtree private constructor(
         private const val MAX_DEPTH = 8
         private const val DEFAULT_HALF_SIZE = 4096.0
 
-        /**
-         * Строит сбалансированное квадродерево по актуальному списку штрихов.
-         */
         fun build(strokes: List<Stroke>): Quadtree {
             if (strokes.isEmpty()) {
                 val emptyBounds = WorldBounds(
@@ -53,9 +52,6 @@ class Quadtree private constructor(
         }
     }
 
-    /**
-     * Заполняет [result] всеми штрихами, чьи границы пересекают [area].
-     */
     fun query(area: WorldBounds, result: MutableList<Stroke>) {
         result.clear()
         root.query(area, result)
@@ -65,7 +61,9 @@ class Quadtree private constructor(
      * Возвращает ID штрихов, задетых круглой областью ластика в точке ([worldX], [worldY]).
      */
     fun findHitStrokeIds(worldX: Double, worldY: Double, eraserRadius: Double): Set<Long> {
-        val searchArea = WorldBounds.fromCenter(worldX, worldY, eraserRadius)
+        // Расширяем область поиска на максимальную полуширину маркера, чтобы цеплять его за края
+        val maxHalfStrokePadding = 24.0 * HIGHLIGHTER_WIDTH_MULTIPLIER * 0.5
+        val searchArea = WorldBounds.fromCenter(worldX, worldY, eraserRadius + maxHalfStrokePadding)
         val candidates = ArrayList<Stroke>(16)
         root.query(searchArea, candidates)
 
@@ -89,7 +87,13 @@ class Quadtree private constructor(
     ): Boolean {
         val pts = stroke.points
         if (pts.isEmpty()) return false
-        val hitThreshold = radius + (stroke.brush.baseSize * 0.5)
+
+        val visualHalfWidth = when (stroke.brush.type) {
+            BrushType.HIGHLIGHTER -> stroke.brush.baseSize * HIGHLIGHTER_WIDTH_MULTIPLIER * 0.5
+            BrushType.FOUNTAIN -> stroke.brush.baseSize * 1.1 * 0.5
+            BrushType.BALLPOINT -> stroke.brush.baseSize * 0.5
+        }
+        val hitThreshold = radius + visualHalfWidth
 
         if (pts.size == 1) {
             return hypot(pts[0].x - cx, pts[0].y - cy) <= hitThreshold
@@ -180,10 +184,10 @@ class Quadtree private constructor(
             val cy = bounds.centerY
             val nextDepth = depth + 1
             children = arrayOf(
-                Node(WorldBounds(bounds.minX, bounds.minY, cx, cy), nextDepth), // NW
-                Node(WorldBounds(cx, bounds.minY, bounds.maxX, cy), nextDepth), // NE
-                Node(WorldBounds(bounds.minX, cy, cx, bounds.maxY), nextDepth), // SW
-                Node(WorldBounds(cx, cy, bounds.maxX, bounds.maxY), nextDepth)  // SE
+                Node(WorldBounds(bounds.minX, bounds.minY, cx, cy), nextDepth),
+                Node(WorldBounds(cx, bounds.minY, bounds.maxX, cy), nextDepth),
+                Node(WorldBounds(bounds.minX, cy, cx, bounds.maxY), nextDepth),
+                Node(WorldBounds(cx, cy, bounds.maxX, bounds.maxY), nextDepth)
             )
         }
 

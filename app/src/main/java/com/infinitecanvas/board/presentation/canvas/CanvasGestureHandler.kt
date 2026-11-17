@@ -169,10 +169,23 @@ class CanvasGestureHandler(
                         screenDownY in img.bounds.minY..img.bounds.maxY
             }
 
-            val allowTouchOnImage = !isStylusOrEraser &&
-                    (hitCornerOnSelected != null || hitSelectedImgBody || hitPinnedImg != null)
+            val hitUnpinnedImg = allImages.lastOrNull { img ->
+                !img.isPinned &&
+                        worldDownX in img.bounds.minX..img.bounds.maxX &&
+                        worldDownY in img.bounds.minY..img.bounds.maxY
+            }
 
-            if (!isStylusOrEraser && !isSingleFingerAllowed && !allowTouchOnImage) {
+            // Палец может перехватывать жест, если касается углов/тела выделенной картинки,
+            // любой картинки для выделения/перетаскивания, или если картинка уже выделена (для тапа мимо неё)
+            val allowTouchForImageInteraction = !isStylusOrEraser && (
+                    hitCornerOnSelected != null ||
+                            hitSelectedImgBody ||
+                            hitPinnedImg != null ||
+                            hitUnpinnedImg != null ||
+                            selectedImg != null
+                    )
+
+            if (!isStylusOrEraser && !isSingleFingerAllowed && !allowTouchForImageInteraction) {
                 do {
                     val event = awaitPointerEvent()
                     val stylusAppeared = event.changes.any {
@@ -252,23 +265,24 @@ class CanvasGestureHandler(
                 continue
             }
 
-            // 2. Приоритет: Интерактивная работа с выделенной картинкой (масштабирование за угол или сдвиг)
-            if (!isForcedEraser && !isLassoMode && selectedImg != null) {
-                if (hitCornerOnSelected != null) {
+            // 2. Приоритет: Работа с уже выделенной картинкой (управление только пальцем; тап мимо снимает выделение)
+            if (selectedImg != null) {
+                if (!isStylusOrEraser && !isForcedEraser && !isLassoMode && hitCornerOnSelected != null) {
                     handleImageResize(pointerId, selectedImg, hitCornerOnSelected)
                     continue
-                } else if (hitSelectedImgBody) {
+                } else if (!isStylusOrEraser && !isForcedEraser && !isLassoMode && hitSelectedImgBody) {
                     val startX = if (selectedImg.isPinned) screenDownX else worldDownX
                     val startY = if (selectedImg.isPinned) screenDownY else worldDownY
                     handleImageDrag(pointerId, selectedImg, startX, startY)
                     continue
-                } else {
+                } else if (isStylusOrEraser || (!hitSelectedImgBody && hitCornerOnSelected == null)) {
+                    // Снимаем выделение при клике/касании мимо картинки (или при начале работы стилусом)
                     onImageSelected(null)
                 }
             }
 
-            // 2.5. Приоритет: Невыделенная закреплённая картинка
-            if (!isForcedEraser && !isLassoMode && hitPinnedImg != null) {
+            // 2.5. Приоритет: Невыделенная закреплённая картинка (выделение и сдвиг только пальцем)
+            if (!isStylusOrEraser && !isForcedEraser && !isLassoMode && hitPinnedImg != null) {
                 onImageSelected(hitPinnedImg.id)
                 val corner = detectResizeCorner(firstDown.position, hitPinnedImg.bounds)
                 if (corner != null) {
@@ -341,17 +355,9 @@ class CanvasGestureHandler(
                 onStrokesSelected(emptySet())
             }
 
-            // 4. Приоритет: Ластик или Рисование штриха (с распознаванием короткого тапа по обычной картинке)
-            var isErasingNow = isForcedEraser || activeTool() == CanvasTool.ERASER
-            val tappedUnselectedImage = if (!isErasingNow) {
-                allImages.lastOrNull { img ->
-                    !img.isPinned &&
-                            worldDownX in img.bounds.minX..img.bounds.maxX &&
-                            worldDownY in img.bounds.minY..img.bounds.maxY
-                }
-            } else {
-                null
-            }
+            // 4. Приоритет: Ластик, рисование штриха стилусом или тап пальцем по обычной картинке
+            var isErasingNow = isStylusOrEraser && (isForcedEraser || activeTool() == CanvasTool.ERASER)
+            val tappedUnselectedImage = if (!isStylusOrEraser && !isErasingNow) hitUnpinnedImg else null
 
             if (isErasingNow) {
                 eraserScreenPos = firstDown.position
@@ -361,7 +367,7 @@ class CanvasGestureHandler(
                     quadtree = quadtree(),
                     onErase = onEraseStrokes
                 )
-            } else {
+            } else if (isStylusOrEraser || isSingleFingerAllowed) {
                 activePoints.clear()
                 appendFilteredPoints(firstDown, viewportState(), activePoints)
             }
@@ -369,31 +375,38 @@ class CanvasGestureHandler(
 
             var movedBeyondTapThreshold = false
             val downScreenPos = firstDown.position
+            var lastPanPos = firstDown.position
 
             while (true) {
                 val event: PointerEvent = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == pointerId }
                     ?: event.changes.firstOrNull()
 
-                val shouldEraseOnThisEvent = activeTool() == CanvasTool.ERASER ||
-                        change?.type == PointerType.Eraser ||
-                        isHardwareEraserHeld ||
-                        (event.buttons.isSecondaryPressed && !isHardwareLassoHeld)
+                val shouldEraseOnThisEvent = isStylusOrEraser && (
+                        activeTool() == CanvasTool.ERASER ||
+                                change?.type == PointerType.Eraser ||
+                                isHardwareEraserHeld ||
+                                (event.buttons.isSecondaryPressed && !isHardwareLassoHeld)
+                        )
 
                 if (change == null || !change.pressed) {
-                    if (!isErasingNow && change != null) {
+                    if ((isStylusOrEraser || isSingleFingerAllowed) && !isErasingNow && change != null) {
                         appendFilteredPoints(change, viewportState(), activePoints)
                     }
                     change?.consume()
 
-                    if (!isErasingNow && !movedBeyondTapThreshold && tappedUnselectedImage != null) {
+                    if (!isStylusOrEraser && !movedBeyondTapThreshold) {
+                        if (tappedUnselectedImage != null) {
+                            onImageSelected(tappedUnselectedImage.id)
+                        } else if (selectedImageId() != null) {
+                            onImageSelected(null)
+                        }
                         activePoints.clear()
-                        onImageSelected(tappedUnselectedImage.id)
                         onStateChanged()
                         break
                     }
 
-                    if (!isErasingNow && activePoints.isNotEmpty()) {
+                    if ((isStylusOrEraser || isSingleFingerAllowed) && !isErasingNow && activePoints.isNotEmpty()) {
                         val committed = Stroke.create(
                             id = System.nanoTime(),
                             points = activePoints.toList(),
@@ -415,34 +428,55 @@ class CanvasGestureHandler(
                         if (dist > 8f) movedBeyondTapThreshold = true
                     }
 
-                    if (shouldEraseOnThisEvent && !isErasingNow) {
-                        if (activePoints.size > 1) {
-                            val committed = Stroke.create(
-                                id = System.nanoTime(),
-                                points = activePoints.toList(),
-                                brush = activeBrush()
-                            )
-                            pathCache.getOrBuild(committed)
-                            onStrokeCommitted(committed)
+                    // Если палец начал двигаться поверх невыделенной картинки (а не тапнул), двигаем/зумим холст
+                    if (!isStylusOrEraser && !isSingleFingerAllowed && movedBeyondTapThreshold) {
+                        val rawZoom = event.calculateZoom()
+                        val pan = if (event.changes.count { it.pressed } > 1) {
+                            event.calculatePan()
+                        } else {
+                            change.position - lastPanPos
                         }
-                        activePoints.clear()
-                        isErasingNow = true
-                    } else if (!shouldEraseOnThisEvent && isErasingNow) {
-                        eraserScreenPos = null
-                        activePoints.clear()
-                        isErasingNow = false
+                        val centroid = event.calculateCentroid(useCurrent = false).let {
+                            if (it == Offset.Unspecified) change.position else it
+                        }
+                        val zoom = if (isZoomLocked()) 1f else rawZoom
+                        onTransform(pan.x, pan.y, zoom, centroid.x, centroid.y)
+                        lastPanPos = change.position
+                        event.changes.forEach { it.consume() }
+                        continue
                     }
+                    lastPanPos = change.position
 
-                    if (isErasingNow) {
-                        eraserScreenPos = change.position
-                        eraseAtScreenPosition(
-                            screenPos = change.position,
-                            viewport = viewportState(),
-                            quadtree = quadtree(),
-                            onErase = onEraseStrokes
-                        )
-                    } else {
-                        appendFilteredPoints(change, viewportState(), activePoints)
+                    if (isStylusOrEraser || isSingleFingerAllowed) {
+                        if (shouldEraseOnThisEvent && !isErasingNow) {
+                            if (activePoints.size > 1) {
+                                val committed = Stroke.create(
+                                    id = System.nanoTime(),
+                                    points = activePoints.toList(),
+                                    brush = activeBrush()
+                                )
+                                pathCache.getOrBuild(committed)
+                                onStrokeCommitted(committed)
+                            }
+                            activePoints.clear()
+                            isErasingNow = true
+                        } else if (!shouldEraseOnThisEvent && isErasingNow) {
+                            eraserScreenPos = null
+                            activePoints.clear()
+                            isErasingNow = false
+                        }
+
+                        if (isErasingNow) {
+                            eraserScreenPos = change.position
+                            eraseAtScreenPosition(
+                                screenPos = change.position,
+                                viewport = viewportState(),
+                                quadtree = quadtree(),
+                                onErase = onEraseStrokes
+                            )
+                        } else {
+                            appendFilteredPoints(change, viewportState(), activePoints)
+                        }
                     }
 
                     change.consume()

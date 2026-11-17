@@ -155,7 +155,7 @@ private fun BrushSelector(
         listOf(
             BrushType.BALLPOINT to R.string.brush_ballpoint,
             BrushType.FOUNTAIN to R.string.brush_fountain,
-            BrushType.PENCIL to R.string.brush_pencil
+            BrushType.HIGHLIGHTER to R.string.brush_highlighter
         ).forEach { (type, labelRes) ->
             FilterChip(
                 selected = activeTool == CanvasTool.BRUSH && activeBrush.type == type,
@@ -181,10 +181,10 @@ private fun BrushSizeSlider(
             style = MaterialTheme.typography.labelSmall
         )
         Slider(
-            value = currentSize,
+            value = currentSize.coerceIn(2f, 36f),
             onValueChange = onSizeChanged,
-            valueRange = 0f..12f,
-            steps = 5,
+            valueRange = 2f..36f,
+            steps = 16,
             modifier = Modifier.height(32.dp)
         )
     }

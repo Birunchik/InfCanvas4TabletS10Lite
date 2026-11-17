@@ -8,19 +8,15 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import kotlin.math.hypot
 
-/**
-    Добавляет отфильтрованные по расстоянию точки в target и, если передан incrementalPath,
-    достраивает его инкрементально в мировых координатах без пересборки с нуля.
- */
 internal fun appendFilteredPoints(
     change: PointerInputChange,
     viewport: ViewportState,
     target: MutableList<StrokePoint>,
-    minStepPx: Double = 1.2,
+    minStepPx: Double = 2.0,
     incrementalPath: Path? = null
 ): Boolean {
     var added = false
-    val minDistWorld = minStepPx / viewport.scale.coerceAtLeast(0.25)
+    val minDistWorld = (minStepPx / viewport.scale.coerceAtLeast(0.25)).coerceAtMost(2.5)
     val basePressure = change.pressure.coerceIn(0.05f, 1f)
 
     for (historical in change.historical) {
@@ -31,7 +27,7 @@ internal fun appendFilteredPoints(
                 if (target.isEmpty()) incrementalPath.moveTo(wx.toFloat(), wy.toFloat())
                 else incrementalPath.lineTo(wx.toFloat(), wy.toFloat())
             }
-            target.add(StrokePoint(wx, wy, basePressure))
+            target.add(StrokePoint(wx, wy, basePressure, historical.uptimeMillis))
             added = true
         }
     }
@@ -43,7 +39,7 @@ internal fun appendFilteredPoints(
             if (target.isEmpty()) incrementalPath.moveTo(wx.toFloat(), wy.toFloat())
             else incrementalPath.lineTo(wx.toFloat(), wy.toFloat())
         }
-        target.add(StrokePoint(wx, wy, basePressure))
+        target.add(StrokePoint(wx, wy, basePressure, change.uptimeMillis))
         added = true
     }
     return added

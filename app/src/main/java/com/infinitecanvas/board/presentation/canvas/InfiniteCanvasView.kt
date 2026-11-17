@@ -102,6 +102,9 @@ fun InfiniteCanvasView(
     }
 
     val pathCache = remember { StrokeGeometryCache() }
+    var cachedActivePointCount by remember { mutableIntStateOf(-1) }
+    var cachedActiveGeometry by remember { mutableStateOf<CachedStrokeGeometry?>(null) }
+
     val activePath = remember { Path() }
     val minorGridPath = remember { Path() }
     val majorGridPath = remember { Path() }
@@ -235,11 +238,20 @@ fun InfiniteCanvasView(
                 }
             }
 
-            // Слой 2: Зафиксированные штрихи
+            // Слой 2а: Зафиксированные штрихи ВЫДЕЛИТЕЛЯ (всегда ниже ручки и пера)
             if (!isDraggingNow) {
                 for (i in visibleStrokesBuffer.indices) {
-                    val cachedGeometry = pathCache.getOrBuild(visibleStrokesBuffer[i])
-                    drawCachedGeometry(cachedGeometry)
+                    val stroke = visibleStrokesBuffer[i]
+                    if (stroke.brush.type == BrushType.HIGHLIGHTER) {
+                        drawCachedGeometry(pathCache.getOrBuild(stroke))
+                    }
+                }
+                // Слой 2б: Зафиксированные штрихи РУЧКИ и ПЕРА (поверх выделителя)
+                for (i in visibleStrokesBuffer.indices) {
+                    val stroke = visibleStrokesBuffer[i]
+                    if (stroke.brush.type != BrushType.HIGHLIGHTER) {
+                        drawCachedGeometry(pathCache.getOrBuild(stroke))
+                    }
                 }
             } else {
                 draggedStrokesBuffer.clear()
@@ -247,7 +259,13 @@ fun InfiniteCanvasView(
                     val stroke = visibleStrokesBuffer[i]
                     if (stroke.id in selectedStrokeIds) {
                         draggedStrokesBuffer.add(stroke)
-                    } else {
+                    } else if (stroke.brush.type == BrushType.HIGHLIGHTER) {
+                        drawCachedGeometry(pathCache.getOrBuild(stroke))
+                    }
+                }
+                for (i in visibleStrokesBuffer.indices) {
+                    val stroke = visibleStrokesBuffer[i]
+                    if (stroke.id !in selectedStrokeIds && stroke.brush.type != BrushType.HIGHLIGHTER) {
                         drawCachedGeometry(pathCache.getOrBuild(stroke))
                     }
                 }
@@ -256,22 +274,41 @@ fun InfiniteCanvasView(
                         translate(gestureHandler.selectionDragDx.toFloat(), gestureHandler.selectionDragDy.toFloat())
                     }) {
                         for (i in draggedStrokesBuffer.indices) {
-                            drawCachedGeometry(pathCache.getOrBuild(draggedStrokesBuffer[i]))
+                            val stroke = draggedStrokesBuffer[i]
+                            if (stroke.brush.type == BrushType.HIGHLIGHTER) {
+                                drawCachedGeometry(pathCache.getOrBuild(stroke))
+                            }
+                        }
+                        for (i in draggedStrokesBuffer.indices) {
+                            val stroke = draggedStrokesBuffer[i]
+                            if (stroke.brush.type != BrushType.HIGHLIGHTER) {
+                                drawCachedGeometry(pathCache.getOrBuild(stroke))
+                            }
                         }
                     }
                 }
             }
 
             // Слой 3: Активный рисуемый штрих
-            if (gestureHandler.activePoints.isNotEmpty()) {
-                val tempStroke = Stroke(
-                    id = 0L,
-                    points = gestureHandler.activePoints,
-                    brush = currentBrush,
-                    bounds = WorldBounds(0.0, 0.0, 0.0, 0.0)
-                )
-                val geom = buildGeometry(tempStroke, activePath)
+            val activeCount = gestureHandler.activePoints.size
+            if (activeCount > 0) {
+                val geom = if (activeCount == cachedActivePointCount && cachedActiveGeometry != null) {
+                    cachedActiveGeometry!!
+                } else {
+                    val tempStroke = Stroke.create(
+                        id = 0L,
+                        points = gestureHandler.activePoints,
+                        brush = currentBrush
+                    )
+                    buildGeometry(tempStroke, activePath).also {
+                        cachedActivePointCount = activeCount
+                        cachedActiveGeometry = it
+                    }
+                }
                 drawCachedGeometry(geom)
+            } else if (cachedActivePointCount != 0) {
+                cachedActivePointCount = 0
+                cachedActiveGeometry = null
             }
 
             // Слой 4: Контур лассо

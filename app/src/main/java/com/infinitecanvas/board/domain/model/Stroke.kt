@@ -9,16 +9,15 @@ import kotlin.math.min
  * @property x Мировая координата X.
  * @property y Мировая координата Y.
  * @property pressure Нормализованная сила нажатия стилуса (0.0f..1.0f).
+ * @property timestampMs Время фиксации точки в миллисекундах для расчёта скорости пера.
  */
 data class StrokePoint(
     val x: Double,
     val y: Double,
-    val pressure: Float
+    val pressure: Float,
+    val timestampMs: Long = 0L
 )
 
-/**
- * Ограничивающий прямоугольник в мировых координатах (для Quadtree и viewport culling).
- */
 data class WorldBounds(
     val minX: Double,
     val minY: Double,
@@ -30,9 +29,6 @@ data class WorldBounds(
     val centerX: Double get() = (minX + maxX) * 0.5
     val centerY: Double get() = (minY + maxY) * 0.5
 
-    /**
-     * Проверяет пересечение с видимой областью или другим прямоугольником.
-     */
     fun intersects(left: Double, top: Double, right: Double, bottom: Double): Boolean {
         return maxX >= left && minX <= right && maxY >= top && minY <= bottom
     }
@@ -58,15 +54,12 @@ data class WorldBounds(
     }
 }
 
- //Завершённый векторный штрих на бесконечном холсте.
 data class Stroke(
     val id: Long,
     val points: List<StrokePoint>,
     val brush: Brush,
     val bounds: WorldBounds
 ) {
-
-    //Возвращает копию штриха, сдвинутую на ([dx], [dy]) в мировых координатах,
     fun translated(dx: Double, dy: Double): Stroke {
         if (dx == 0.0 && dy == 0.0) return this
         val shiftedPoints = points.map { pt ->
@@ -80,21 +73,25 @@ data class Stroke(
     }
 
     companion object {
-        /**
-         * Создаёт штрих и автоматически вычисляет его мировые границы.
-         */
         fun create(id: Long, points: List<StrokePoint>, brush: Brush): Stroke {
-            val padding = (brush.baseSize * 2.5).coerceAtLeast(4.0)
+            val visualWidth = when (brush.type) {
+                BrushType.HIGHLIGHTER -> brush.baseSize * 6.0
+                BrushType.FOUNTAIN -> brush.baseSize * 1.6
+                BrushType.BALLPOINT -> brush.baseSize * 1.05
+            }
+            val padding = (visualWidth * 0.65).coerceAtLeast(4.0)
+
             var minX = Double.POSITIVE_INFINITY
             var minY = Double.POSITIVE_INFINITY
             var maxX = Double.NEGATIVE_INFINITY
             var maxY = Double.NEGATIVE_INFINITY
 
-            for ((x, y) in points) {
-                minX = min(minX, x)
-                minY = min(minY, y)
-                maxX = max(maxX, x)
-                maxY = max(maxY, y)
+            for (i in points.indices) {
+                val p = points[i]
+                minX = min(minX, p.x)
+                minY = min(minY, p.y)
+                maxX = max(maxX, p.x)
+                maxY = max(maxY, p.y)
             }
 
             return Stroke(

@@ -1,10 +1,9 @@
 package com.infinitecanvas.board.domain.model
 
 enum class BrushType {
-
-    BALLPOINT,  // Шариковая ручка: равномерная толщина
-    FOUNTAIN,   //Перьевая ручка: толщина от силы нажатия S Pen.
-    PENCIL   //Карандаш: полупрозрачный след
+    BALLPOINT,
+    FOUNTAIN,
+    HIGHLIGHTER
 }
 
 data class Brush(

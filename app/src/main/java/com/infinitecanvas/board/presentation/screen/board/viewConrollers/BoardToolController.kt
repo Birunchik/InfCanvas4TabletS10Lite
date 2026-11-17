@@ -19,7 +19,8 @@ class BoardToolController(
         Brush(
             type = BrushType.BALLPOINT,
             colorArgb = 0xFF1A1C1E.toInt(),
-            baseSize = 4f
+            baseSize = 4f,
+            opacity = 1f
         )
     )
     val activeBrush: StateFlow<Brush> = _activeBrush.asStateFlow()
@@ -39,7 +40,13 @@ class BoardToolController(
 
     fun selectBrushType(type: BrushType) {
         _activeTool.value = CanvasTool.BRUSH
-        _activeBrush.update { it.copy(type = type) }
+        _activeBrush.update { current ->
+            val targetOpacity = if (type == BrushType.HIGHLIGHTER) 0.4f else 1f
+            current.copy(
+                type = type,
+                opacity = targetOpacity
+            )
+        }
         onClearSelectionRequested()
     }
 

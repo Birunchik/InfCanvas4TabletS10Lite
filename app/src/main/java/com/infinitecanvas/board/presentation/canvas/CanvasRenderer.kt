@@ -1,15 +1,27 @@
 package com.infinitecanvas.board.presentation.canvas
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.withTransform
 import com.infinitecanvas.board.domain.model.ViewportState
+import com.infinitecanvas.board.domain.model.WorldBounds
 import kotlin.math.floor
 import kotlin.math.round
 
-fun DrawScope.drawCachedGeometry(geom: CachedStrokeGeometry) {
+private val highlighterLayerPaint = Paint()
+
+fun DrawScope.drawCachedGeometry(
+    geom: CachedStrokeGeometry,
+    visibleWorldBounds: WorldBounds? = null
+) {
     val dotCenter = geom.singleDotCenter
     if (dotCenter != null) {
         drawCircle(
@@ -20,22 +32,69 @@ fun DrawScope.drawCachedGeometry(geom: CachedStrokeGeometry) {
         return
     }
 
-    if (geom.isFilledPolygon) {
-        drawPath(
-            path = geom.path,
-            color = geom.color
+    if (geom.isHighlighter) {
+        val layerBounds = Rect(
+            left = geom.bounds.minX.toFloat(),
+            top = geom.bounds.minY.toFloat(),
+            right = geom.bounds.maxX.toFloat(),
+            bottom = geom.bounds.maxY.toFloat()
         )
-    } else {
-        drawPath(
-            path = geom.path,
-            color = geom.color,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = geom.strokeWidth,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
+        val opaqueColor = geom.color.copy(alpha = 1f)
+        highlighterLayerPaint.alpha = geom.color.alpha
+
+        drawIntoCanvas { canvas ->
+            canvas.saveLayer(layerBounds, highlighterLayerPaint)
+            try {
+                withTransform({
+                    rotate(degrees = HIGHLIGHTER_CHISEL_ANGLE_DEG, pivot = Offset.Zero)
+                    scale(scaleX = 1f, scaleY = 1f / 4.5f, pivot = Offset.Zero)
+                    rotate(degrees = -HIGHLIGHTER_CHISEL_ANGLE_DEG, pivot = Offset.Zero)
+                }) {
+                    drawPath(
+                        path = geom.path,
+                        color = opaqueColor,
+                        style = Stroke(
+                            width = geom.strokeWidth,
+                            cap = StrokeCap.Square,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                }
+            } finally {
+                canvas.restore()
+            }
+        }
+        return
     }
+
+    if (geom.variableSegments.isNotEmpty()) {
+        for (i in geom.variableSegments.indices) {
+            val seg = geom.variableSegments[i]
+            if (visibleWorldBounds != null && !seg.bounds.intersects(visibleWorldBounds)) {
+                continue
+            }
+            drawPath(
+                path = seg.path,
+                color = geom.color,
+                style = Stroke(
+                    width = seg.width,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+        }
+        return
+    }
+
+    drawPath(
+        path = geom.path,
+        color = geom.color,
+        style = Stroke(
+            width = geom.strokeWidth,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+    )
 }
 
 fun DrawScope.drawBatchedWorldGrid(
@@ -68,7 +127,6 @@ fun DrawScope.drawBatchedWorldGrid(
     while (currentX <= worldRight) {
         val screenX = viewportState.worldToScreenX(currentX)
 
-        // Определяем индекс линии с помощью округления, защищаясь от погрешностей Double
         val gridIndexX = round(currentX / fixedStep).toInt()
         val isMajorX = gridIndexX % 5 == 0
 
@@ -83,7 +141,6 @@ fun DrawScope.drawBatchedWorldGrid(
     while (currentY <= worldBottom) {
         val screenY = viewportState.worldToScreenY(currentY)
 
-        // Аналогично для оси Y
         val gridIndexY = round(currentY / fixedStep).toInt()
         val isMajorY = gridIndexY % 5 == 0
 
@@ -96,11 +153,11 @@ fun DrawScope.drawBatchedWorldGrid(
     drawPath(
         path = minorGridPath,
         color = gridColor,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
+        style = Stroke(width = 1f)
     )
     drawPath(
         path = majorGridPath,
         color = majorGridColor,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+        style = Stroke(width = 2f)
     )
 }

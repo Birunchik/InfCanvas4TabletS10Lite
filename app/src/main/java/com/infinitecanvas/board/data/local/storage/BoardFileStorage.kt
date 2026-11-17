@@ -77,6 +77,7 @@ class BoardFileStorage(context: Context) {
                     out.writeDouble(p.x)
                     out.writeDouble(p.y)
                     out.writeFloat(p.pressure)
+                    out.writeLong(p.timestampMs)
                 }
             }
 
@@ -131,13 +132,27 @@ class BoardFileStorage(context: Context) {
 
             for (i in 0 until strokeCount) {
                 val id = input.readLong()
-                val typeOrdinal = input.readInt().coerceIn(0, brushTypes.lastIndex)
-                val brush = Brush(
-                    type = brushTypes[typeOrdinal],
-                    colorArgb = input.readInt(),
-                    baseSize = input.readFloat(),
-                    opacity = input.readFloat()
-                )
+                val rawTypeOrdinal = input.readInt()
+                val colorArgb = input.readInt()
+                val baseSize = input.readFloat()
+                val opacity = input.readFloat()
+
+                // Миграция удалённого BrushType.PENCIL (индекс 2 в v1..v3) в полупрозрачный BALLPOINT
+                val brush = if (version < 4 && rawTypeOrdinal == 2) {
+                    Brush(
+                        type = BrushType.BALLPOINT,
+                        colorArgb = colorArgb,
+                        baseSize = baseSize,
+                        opacity = (opacity * 0.45f).coerceIn(0.1f, 1f)
+                    )
+                } else {
+                    Brush(
+                        type = brushTypes[rawTypeOrdinal.coerceIn(0, brushTypes.lastIndex)],
+                        colorArgb = colorArgb,
+                        baseSize = baseSize,
+                        opacity = opacity
+                    )
+                }
 
                 val bounds = WorldBounds(
                     minX = input.readDouble(),
@@ -153,7 +168,8 @@ class BoardFileStorage(context: Context) {
                         StrokePoint(
                             x = input.readDouble(),
                             y = input.readDouble(),
-                            pressure = input.readFloat()
+                            pressure = input.readFloat(),
+                            timestampMs = if (version >= 4) input.readLong() else 0L
                         )
                     )
                 }
@@ -183,7 +199,7 @@ class BoardFileStorage(context: Context) {
                                     maxY = input.readDouble()
                                 ),
                                 zIndex = input.readInt(),
-                                isPinned = version >= 3 && input.readBoolean()
+                                isPinned = if (version >= 3) input.readBoolean() else false
                             )
                         )
                     }
@@ -203,6 +219,6 @@ class BoardFileStorage(context: Context) {
 
     private companion object {
         const val MAGIC_HEADER = 0x49434231 // "ICB1"
-        const val FORMAT_VERSION = 3
+        const val FORMAT_VERSION = 4
     }
 }

@@ -65,10 +65,14 @@ data class Stroke(
         val shiftedPoints = points.map { pt ->
             pt.copy(x = pt.x + dx, y = pt.y + dy)
         }
-        return create(
-            id = id,
+        return copy(
             points = shiftedPoints,
-            brush = brush
+            bounds = WorldBounds(
+                minX = bounds.minX + dx,
+                minY = bounds.minY + dy,
+                maxX = bounds.maxX + dx,
+                maxY = bounds.maxY + dy
+            )
         )
     }
 

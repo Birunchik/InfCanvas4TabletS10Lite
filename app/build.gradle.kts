@@ -38,6 +38,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.compose.runtime)
+    implementation(libs.kotlinx.collections.immutable)
     // Базовые компоненты Android и архитектура
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.exifinterface)

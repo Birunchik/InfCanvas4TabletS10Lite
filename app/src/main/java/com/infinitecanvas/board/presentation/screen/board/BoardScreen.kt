@@ -47,8 +47,8 @@ fun BoardScreen(
     val isZoomLocked by viewModel.isZoomLocked.collectAsState()
     val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
-    val viewportState by viewModel.viewportState.collectAsState()
     val isSelectedImagePinned by viewModel.isSelectedImagePinned.collectAsState()
+    val zoomScale by viewModel.zoomScale.collectAsState()
 
     val hasSelectedImage by viewModel.hasSelectedImage.collectAsState()
 
@@ -97,7 +97,7 @@ fun BoardScreen(
                 .align(Alignment.BottomEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(16.dp),
-            zoom = viewportState.scale,
+            zoom = zoomScale,
             isZoomLocked = isZoomLocked,
             selectedCount = selectedStrokeIds.size,
             hasClipboardContent = hasClipboardContent,

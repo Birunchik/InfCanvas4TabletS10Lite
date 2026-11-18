@@ -64,6 +64,7 @@ fun rememberCanvasGestureHandler(
 
     return remember {
         CanvasGestureHandler(
+            renderState = renderState,
             viewportState = { currentViewport },
             activeTool = { currentTool },
             activeBrush = { currentBrush },

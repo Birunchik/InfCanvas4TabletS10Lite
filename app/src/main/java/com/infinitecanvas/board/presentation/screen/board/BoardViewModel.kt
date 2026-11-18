@@ -19,6 +19,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
@@ -66,8 +71,16 @@ class BoardViewModel(
     val viewportState = viewportController.viewportState
     val isZoomLocked = viewportController.isZoomLocked
 
+    // Только масштаб — для BoardScreen (перерисовка только при zoom, не при pan).
+    val zoomScale: StateFlow<Double> = viewportState
+        .map { it.scale }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 1.0)
+
     val strokes = strokeController.strokes
     val selectedStrokeIds = strokeController.selectedStrokeIds
+    val selectionBounds = strokeController.selectionBounds
+    val quadtree = strokeController.quadtree
     val canUndo = strokeController.canUndo
     val hasClipboardContent = strokeController.hasClipboardContent
 

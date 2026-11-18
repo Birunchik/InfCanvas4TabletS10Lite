@@ -1,6 +1,12 @@
 package com.infinitecanvas.board.presentation.screen.board.viewConrollers
 
 import com.infinitecanvas.board.domain.model.Stroke
+import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.spatial.Quadtree
+import com.infinitecanvas.board.presentation.canvas.computeSelectionWorldBounds
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,13 +20,22 @@ class BoardStrokeController(
     private val onContentChanged: () -> Unit,
     private val onSelectionActivated: () -> Unit
 ) {
-    private val _strokes = MutableStateFlow<List<Stroke>>(emptyList())
-    val strokes: StateFlow<List<Stroke>> = _strokes.asStateFlow()
+    private val _strokes = MutableStateFlow<PersistentList<Stroke>>(persistentListOf())
+    val strokes: StateFlow<PersistentList<Stroke>> = _strokes.asStateFlow()
 
     private val _selectedStrokeIds = MutableStateFlow<Set<Long>>(emptySet())
     val selectedStrokeIds: StateFlow<Set<Long>> = _selectedStrokeIds.asStateFlow()
 
-    private val undoStack = ArrayDeque<List<Stroke>>()
+    private val _selectionBounds = MutableStateFlow<WorldBounds?>(null)
+    val selectionBounds: StateFlow<WorldBounds?> = _selectionBounds.asStateFlow()
+
+    // Мутабельный quadtree: insert/remove обновляют in-place, StateFlow не эмитит
+    // на мутациях (тот же instance по ==). Эмитит только при замене instance
+    // (undo, setInitialStrokes) — чтобы UI перерисовал с новым деревом.
+    private val _quadtree = MutableStateFlow(Quadtree.build(emptyList()))
+    val quadtree: StateFlow<Quadtree> = _quadtree.asStateFlow()
+
+    private val undoStack = ArrayDeque<PersistentList<Stroke>>()
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
@@ -35,29 +50,46 @@ class BoardStrokeController(
         undoStack.clear()
         _canUndo.value = false
         _selectedStrokeIds.value = emptySet()
-        _strokes.value = strokes
+        _selectionBounds.value = null
+        val persistent = strokes.toPersistentList()
+        _strokes.value = persistent
+        _quadtree.value = Quadtree.build(persistent)
     }
 
     fun onStrokeCommitted(stroke: Stroke) {
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
-        _strokes.value = currentList + stroke
+        _strokes.value = currentList.adding(stroke)
+        _quadtree.value.insert(stroke)  // in-place, без эмита
         onContentChanged()
     }
 
     fun eraseStrokesByIds(idsToRemove: Set<Long>) {
         if (idsToRemove.isEmpty()) return
         val currentList = _strokes.value
-        val filtered = currentList.filterNot { it.id in idsToRemove }
-        if (filtered.size != currentList.size) {
-            pushUndoSnapshot(currentList)
-            _strokes.value = filtered
-            onContentChanged()
+        val filtered = currentList.removingAll { it.id in idsToRemove }
+        if (filtered.size == currentList.size) return
+
+        pushUndoSnapshot(currentList)
+        _strokes.value = filtered
+        idsToRemove.forEach { _quadtree.value.remove(it) }
+
+        val selected = _selectedStrokeIds.value
+        if (selected.isNotEmpty() && selected.any { it in idsToRemove }) {
+            val remaining = selected - idsToRemove
+            _selectedStrokeIds.value = remaining
+            _selectionBounds.value = if (remaining.isEmpty()) null
+            else computeSelectionWorldBounds(filtered, remaining)
         }
+
+        onContentChanged()
     }
 
     fun selectStrokes(ids: Set<Long>) {
         _selectedStrokeIds.value = ids
+        _selectionBounds.value = if (ids.isEmpty()) null
+        else computeSelectionWorldBounds(_strokes.value, ids)
+
         if (ids.isNotEmpty()) {
             onSelectionActivated()
         }
@@ -65,19 +97,22 @@ class BoardStrokeController(
 
     fun clearSelection() {
         _selectedStrokeIds.value = emptySet()
+        _selectionBounds.value = null
     }
 
     fun deleteSelectedStrokes() {
         val ids = _selectedStrokeIds.value
         if (ids.isEmpty()) return
         val currentList = _strokes.value
-        val filtered = currentList.filterNot { it.id in ids }
+        val filtered = currentList.removingAll { it.id in ids }
         if (filtered.size != currentList.size) {
             pushUndoSnapshot(currentList)
             _strokes.value = filtered
+            ids.forEach { _quadtree.value.remove(it) }
             onContentChanged()
         }
         _selectedStrokeIds.value = emptySet()
+        _selectionBounds.value = null
     }
 
     fun moveSelectedStrokes(dx: Double, dy: Double) {
@@ -85,9 +120,30 @@ class BoardStrokeController(
         if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
-        _strokes.value = currentList.map { stroke ->
-            if (stroke.id in ids) stroke.translated(dx, dy) else stroke
+
+        val movedStrokes = ArrayList<Stroke>(ids.size)
+        _strokes.value = currentList
+            .map { stroke ->
+                if (stroke.id in ids) {
+                    val moved = stroke.translated(dx, dy)
+                    movedStrokes.add(moved)
+                    moved
+                } else stroke
+            }
+            .toPersistentList()
+
+        ids.forEach { _quadtree.value.remove(it) }
+        movedStrokes.forEach { _quadtree.value.insert(it) }
+
+        _selectionBounds.value?.let { b ->
+            _selectionBounds.value = WorldBounds(
+                minX = b.minX + dx,
+                minY = b.minY + dy,
+                maxX = b.maxX + dx,
+                maxY = b.maxY + dy
+            )
         }
+
         onContentChanged()
     }
 
@@ -117,8 +173,12 @@ class BoardStrokeController(
 
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
-        _strokes.value = currentList + pastedStrokes
-        _selectedStrokeIds.value = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
+        _strokes.value = currentList.addingAll(pastedStrokes)
+        pastedStrokes.forEach { _quadtree.value.insert(it) }
+
+        val newIds = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
+        _selectedStrokeIds.value = newIds
+        _selectionBounds.value = computeSelectionWorldBounds(_strokes.value, newIds)
         onSelectionActivated()
         onContentChanged()
     }
@@ -127,12 +187,15 @@ class BoardStrokeController(
         if (undoStack.isEmpty()) return
         val previous = undoStack.removeLast()
         _strokes.value = previous
+        // Полная пересборка: O(N log N), ~2–5 ms для 10k штрихов.
+        _quadtree.value = Quadtree.build(previous)
         _canUndo.value = undoStack.isNotEmpty()
         _selectedStrokeIds.value = emptySet()
+        _selectionBounds.value = null
         onContentChanged()
     }
 
-    private fun pushUndoSnapshot(snapshot: List<Stroke>) {
+    private fun pushUndoSnapshot(snapshot: PersistentList<Stroke>) {
         if (undoStack.size >= 40) {
             undoStack.removeFirst()
         }

@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
+import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.spatial.Quadtree
@@ -17,7 +18,7 @@ internal fun appendFilteredPoints(
     change: PointerInputChange,
     viewport: ViewportState,
     target: MutableList<StrokePoint>,
-    minStepPx: Double = 2.0,
+    minStepPx: Double = 4.0,
     incrementalPath: Path? = null
 ): Boolean {
     var added = false
@@ -65,12 +66,20 @@ internal fun eraseAtScreenPosition(
     screenPos: Offset,
     viewport: ViewportState,
     quadtree: Quadtree,
+    candidatesBuffer: MutableList<Stroke>,
+    hitIdsBuffer: MutableSet<Long>,
     onErase: (Set<Long>) -> Unit
 ) {
     val worldX = viewport.screenToWorldX(screenPos.x)
     val worldY = viewport.screenToWorldY(screenPos.y)
     val worldEraserRadius = 18.0 / viewport.scale.coerceAtLeast(0.15)
-    val hitIds = quadtree.findHitStrokeIds(worldX, worldY, worldEraserRadius)
+    val hitIds = quadtree.findHitStrokeIds(
+        worldX = worldX,
+        worldY = worldY,
+        eraserRadius = worldEraserRadius,
+        candidatesBuffer = candidatesBuffer,
+        hitIdsBuffer = hitIdsBuffer
+    )
     if (hitIds.isNotEmpty()) {
         onErase(hitIds)
     }

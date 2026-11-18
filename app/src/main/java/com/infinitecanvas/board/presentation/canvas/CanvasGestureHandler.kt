@@ -31,9 +31,11 @@ import com.infinitecanvas.board.presentation.canvas.gestures.StylusButtonManager
 import com.infinitecanvas.board.presentation.canvas.gestures.appendFilteredPoints
 import com.infinitecanvas.board.presentation.canvas.gestures.eraseAtScreenPosition
 import com.infinitecanvas.board.presentation.canvas.gestures.handleViewportPanZoom
+import com.infinitecanvas.board.presentation.canvas.renderer.CanvasRenderState
 import kotlin.math.hypot
 
 class CanvasGestureHandler(
+    private val renderState: CanvasRenderState,
     private val viewportState: () -> ViewportState,
     private val activeTool: () -> CanvasTool,
     private val activeBrush: () -> Brush,
@@ -248,7 +250,14 @@ class CanvasGestureHandler(
 
         if (isErasingNow) {
             stylusManager.updateEraserPos(firstDown.position)
-            eraseAtScreenPosition(firstDown.position, viewportState(), quadtree(), onEraseStrokes)
+            eraseAtScreenPosition(
+                screenPos = firstDown.position,
+                viewport = viewportState(),
+                quadtree = quadtree(),
+                candidatesBuffer = renderState.eraserCandidatesBuffer,
+                hitIdsBuffer = renderState.eraserHitIdsBuffer,
+                onErase = onEraseStrokes
+            )
         } else if (isStylusOrEraser || isSingleFingerAllowed) {
             activePoints.clear()
             appendFilteredPoints(firstDown, viewportState(), activePoints)
@@ -330,7 +339,14 @@ class CanvasGestureHandler(
 
                     if (isErasingNow) {
                         stylusManager.updateEraserPos(change.position)
-                        eraseAtScreenPosition(change.position, viewportState(), quadtree(), onEraseStrokes)
+                        eraseAtScreenPosition(
+                            screenPos = change.position,
+                            viewport = viewportState(),
+                            quadtree = quadtree(),
+                            candidatesBuffer = renderState.eraserCandidatesBuffer,
+                            hitIdsBuffer = renderState.eraserHitIdsBuffer,
+                            onErase = onEraseStrokes
+                        )
                     } else {
                         appendFilteredPoints(change, viewportState(), activePoints)
                     }

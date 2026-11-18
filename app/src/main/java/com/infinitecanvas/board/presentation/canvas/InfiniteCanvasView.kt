@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -32,9 +31,9 @@ import kotlin.math.abs
 
 @Composable
 fun InfiniteCanvasView(
+    quadtree: Quadtree,
     boardId: Long,
     viewportState: ViewportState,
-    strokes: List<Stroke>,
     images: List<BoardImage>,
     selectedImageId: Long?,
     imageCache: BoardImageCache,
@@ -42,6 +41,7 @@ fun InfiniteCanvasView(
     activeTool: CanvasTool,
     activeBrush: Brush,
     selectedStrokeIds: Set<Long>,
+    selectionBounds: WorldBounds?,
     isZoomLocked: Boolean = false,
     allowFingerDrawing: Boolean = false,
     onCanvasViewportSizeChanged: (widthPx: Int, heightPx: Int) -> Unit,
@@ -58,12 +58,6 @@ fun InfiniteCanvasView(
     majorGridColor: Color = Color(0xFFC4C9D0)
 ) {
     val renderState = rememberCanvasRenderState()
-
-    val quadtree = remember(strokes) { Quadtree.build(strokes) }
-
-    val selectionBounds = remember(strokes, selectedStrokeIds) {
-        computeSelectionWorldBounds(strokes, selectedStrokeIds)
-    }
 
     val gestureHandler = rememberCanvasGestureHandler(
         viewportState = viewportState,

@@ -11,9 +11,9 @@ import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.renderer.HIGHLIGHTER_WIDTH_MULTIPLIER
 import com.infinitecanvas.board.presentation.canvas.renderer.applyChiselForwardTransform
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 private const val MAX_GEOMETRY_CACHE_ENTRIES = 1500
 private const val MAX_POOLED_BUFFER_CAPACITY = 2048
@@ -307,15 +307,8 @@ private fun buildSmoothQuadraticPathFromArrays(
 ) {
     outPath.moveTo(xs[0], ys[0])
     for (i in 1 until n) {
-        val prevX = xs[i - 1]
-        val prevY = ys[i - 1]
-        val currX = xs[i]
-        val currY = ys[i]
-        val midX = (prevX + currX) * 0.5f
-        val midY = (prevY + currY) * 0.5f
-        outPath.quadraticTo(prevX, prevY, midX, midY)
+        outPath.lineTo(xs[i], ys[i])
     }
-    outPath.lineTo(xs[n - 1], ys[n - 1])
 }
 
 private fun buildQuantizedFountainSegments(
@@ -430,7 +423,7 @@ private fun computeSmoothedWidthsInScratch(
         }
 
         if (i > 0) {
-            val segDist = hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            val segDist = hypotFast(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
             cumDist[i] = cumDist[i - 1] + segDist
             windowDist += segDist
 
@@ -440,7 +433,7 @@ private fun computeSmoothedWidthsInScratch(
                 while (windowStartIdx < i - 1 &&
                     (currTs - rawPoints[windowStartIdx].timestampMs) > 45L
                 ) {
-                    val d = hypot(
+                    val d = hypotFast(
                         xs[windowStartIdx + 1] - xs[windowStartIdx],
                         ys[windowStartIdx + 1] - ys[windowStartIdx]
                     )
@@ -505,3 +498,5 @@ fun calculateWidthForBrush(
         }
     }.coerceAtLeast(0.5f)
 }
+
+private inline fun hypotFast(dx: Float, dy: Float): Float = sqrt(dx * dx + dy * dy)

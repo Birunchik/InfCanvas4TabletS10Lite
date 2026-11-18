@@ -23,6 +23,10 @@ class CanvasRenderState {
     val visibleStrokesBuffer = ArrayList<Stroke>(128)
     val draggedStrokesBuffer = ArrayList<Stroke>(64)
 
+    // Переиспользуемые буферы для hit-test ластика — ноль аллокаций на движение.
+    val eraserCandidatesBuffer = ArrayList<Stroke>(16)
+    val eraserHitIdsBuffer = HashSet<Long>()
+
     val screenDashEffect: PathEffect =
         PathEffect.dashPathEffect(floatArrayOf(14f, 10f), 0f)
 

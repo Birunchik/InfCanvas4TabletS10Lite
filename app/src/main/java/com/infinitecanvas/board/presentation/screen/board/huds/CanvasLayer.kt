@@ -20,12 +20,15 @@ internal fun CanvasLayer(
     isZoomLocked: Boolean
 ) {
     val viewportState by viewModel.viewportState.collectAsState()
-    val strokes by viewModel.strokes.collectAsState()
     val images by viewModel.images.collectAsState()
     val selectedImageId by viewModel.selectedImageId.collectAsState()
     val activeTool by viewModel.activeTool.collectAsState()
     val activeBrush by viewModel.activeBrush.collectAsState()
     val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
+
+    // Добавляем подписки для новых параметров
+    val selectionBounds by viewModel.selectionBounds.collectAsState()
+    val quadtree by viewModel.quadtree.collectAsState()
 
     var imageLoadTick by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -41,7 +44,6 @@ internal fun CanvasLayer(
         boardId = boardId,
         isZoomLocked = isZoomLocked,
         viewportState = viewportState,
-        strokes = strokes,
         images = images,
         selectedImageId = selectedImageId,
         imageCache = imageCache,
@@ -49,6 +51,8 @@ internal fun CanvasLayer(
         activeTool = activeTool,
         activeBrush = activeBrush,
         selectedStrokeIds = selectedStrokeIds,
+        selectionBounds = selectionBounds,
+        quadtree = quadtree,
         allowFingerDrawing = false,
         onCanvasViewportSizeChanged = viewModel::updateCanvasViewportSize,
         onStrokeCommitted = viewModel::onStrokeCommitted,

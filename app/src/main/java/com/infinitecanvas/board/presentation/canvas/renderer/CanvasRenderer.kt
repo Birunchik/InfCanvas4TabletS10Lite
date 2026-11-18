@@ -20,12 +20,19 @@ const val HIGHLIGHTER_CHISEL_ANGLE_DEG = -30f
 
 private val highlighterLayerPaint = Paint()
 
+private val strokeCache = HashMap<Float, Stroke>()
+
 private val forwardChiselMatrix = Matrix().apply {
     postRotate(-HIGHLIGHTER_CHISEL_ANGLE_DEG)
     postScale(1f, 4.5f)
     postRotate(HIGHLIGHTER_CHISEL_ANGLE_DEG)
 }
 
+private fun getStroke(width: Float): Stroke {
+    return strokeCache.getOrPut(width) {
+        Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    }
+}
 fun applyChiselForwardTransform(path: Path) {
     path.asAndroidPath().transform(forwardChiselMatrix)
 }
@@ -68,11 +75,7 @@ fun DrawScope.drawCachedGeometry(
                     drawPath(
                         path = geom.path,
                         color = opaqueColor,
-                        style = Stroke(
-                            width = geom.strokeWidth,
-                            cap = StrokeCap.Square,
-                            join = StrokeJoin.Round
-                        )
+                        style = getStroke(geom.strokeWidth)
                     )
                 }
             } finally {
@@ -91,11 +94,7 @@ fun DrawScope.drawCachedGeometry(
             drawPath(
                 path = seg.path,
                 color = geom.color,
-                style = Stroke(
-                    width = seg.width,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
+                style = getStroke(geom.strokeWidth)
             )
         }
         return
@@ -104,10 +103,6 @@ fun DrawScope.drawCachedGeometry(
     drawPath(
         path = geom.path,
         color = geom.color,
-        style = Stroke(
-            width = geom.strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
+        style = getStroke(geom.strokeWidth)
     )
 }

@@ -4,51 +4,64 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.renderer.HIGHLIGHTER_WIDTH_MULTIPLIER
-import kotlin.math.hypot
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
-  Пространственный индекс Quadtree для быстрого поиска штрихов в видимой области
+ * Пространственный индекс Quadtree для быстрого поиска штрихов.
+ *
+ * **Мутабельный**: [insert] и [remove] обновляют дерево in-place, сохраняя
+ * инвариант через обратный индекс `nodeById`.
+ *
+ * **Not thread-safe.** Все мутации и запросы должны выполняться на одном потоке
+ * (Main). Контроллеры досок вызывают мутации синхронно из UI-операций, а
+ * Canvas-отрисовка читает дерево в том же Main-thread draw pass.
+ *
+ * Root bounds фиксированы на ±[DEFAULT_HALF_SIZE]. Штрихи, нарисованные
+ * за пределами этого диапазона, попадают в корневой узел и будут возвращаться
+ * `query` только при пересечении root bounds — типичный сценарий (viewport
+ * zoom 0.15–8×) гарантированно укладывается внутрь.
  */
 class Quadtree private constructor(
-    private val root: Node
+    private var root: Node
 ) {
     companion object {
         private const val MAX_ITEMS_PER_NODE = 8
-        private const val MAX_DEPTH = 8
-        private const val DEFAULT_HALF_SIZE = 4096.0
+        private const val MAX_DEPTH = 20
+        private const val DEFAULT_HALF_SIZE = 1_000_000.0
 
         fun build(strokes: List<Stroke>): Quadtree {
-            if (strokes.isEmpty()) {
-                val emptyBounds = WorldBounds(
+            val emptyRoot = Node(
+                WorldBounds(
                     -DEFAULT_HALF_SIZE,
                     -DEFAULT_HALF_SIZE,
                     DEFAULT_HALF_SIZE,
                     DEFAULT_HALF_SIZE
-                )
-                return Quadtree(Node(emptyBounds, 0))
-            }
-
-            var minX = -DEFAULT_HALF_SIZE
-            var minY = -DEFAULT_HALF_SIZE
-            var maxX = DEFAULT_HALF_SIZE
-            var maxY = DEFAULT_HALF_SIZE
-
+                ),
+                0
+            )
+            val tree = Quadtree(emptyRoot)
             for (i in strokes.indices) {
-                val b = strokes[i].bounds
-                minX = min(minX, b.minX - 64.0)
-                minY = min(minY, b.minY - 64.0)
-                maxX = max(maxX, b.maxX + 64.0)
-                maxY = max(maxY, b.maxY + 64.0)
+                tree.insert(strokes[i])
             }
-
-            val rootNode = Node(WorldBounds(minX, minY, maxX, maxY), 0)
-            for (i in strokes.indices) {
-                rootNode.insert(strokes[i])
-            }
-            return Quadtree(rootNode)
+            return tree
         }
+    }
+
+    /**
+     * Обратный индекс: stroke.id → узел, где физически лежит штрих.
+     * Обновляется при каждой вставке и каждом перераспределении при subdivide.
+     */
+    private val nodeById = HashMap<Long, Node>()
+
+    /** Вставляет штрих. Если штрих с таким id уже есть — старый orphan-узел не очищается. */
+    fun insert(stroke: Stroke) {
+        root.insert(stroke) { id, node -> nodeById[id] = node }
+    }
+
+    /** Удаляет штрих по id. No-op, если id отсутствует. */
+    fun remove(strokeId: Long) {
+        val node = nodeById.remove(strokeId) ?: return
+        node.removeItem(strokeId)
     }
 
     fun query(area: WorldBounds, result: MutableList<Stroke>) {
@@ -58,23 +71,34 @@ class Quadtree private constructor(
 
     /**
      * Возвращает ID штрихов, задетых круглой областью ластика в точке ([worldX], [worldY]).
+     *
+     * WARNING: возвращает view на [hitIdsBuffer] — валиден только до следующего
+     * вызова [findHitStrokeIds] с тем же буфером. Потребитель должен обработать
+     * результат синхронно, до возврата из текущего кадра.
      */
-    fun findHitStrokeIds(worldX: Double, worldY: Double, eraserRadius: Double): Set<Long> {
+    fun findHitStrokeIds(
+        worldX: Double,
+        worldY: Double,
+        eraserRadius: Double,
+        candidatesBuffer: MutableList<Stroke>,
+        hitIdsBuffer: MutableSet<Long>
+    ): Set<Long> {
         val maxHalfStrokePadding = 24.0 * HIGHLIGHTER_WIDTH_MULTIPLIER * 0.5
         val searchArea = WorldBounds.fromCenter(worldX, worldY, eraserRadius + maxHalfStrokePadding)
-        val candidates = ArrayList<Stroke>(16)
-        root.query(searchArea, candidates)
 
-        if (candidates.isEmpty()) return emptySet()
+        candidatesBuffer.clear()
+        root.query(searchArea, candidatesBuffer)
 
-        val hitIds = HashSet<Long>()
-        for (i in candidates.indices) {
-            val stroke = candidates[i]
+        hitIdsBuffer.clear()
+        if (candidatesBuffer.isEmpty()) return emptySet()
+
+        for (i in candidatesBuffer.indices) {
+            val stroke = candidatesBuffer[i]
             if (isStrokeHitByCircle(stroke, worldX, worldY, eraserRadius)) {
-                hitIds.add(stroke.id)
+                hitIdsBuffer.add(stroke.id)
             }
         }
-        return hitIds
+        return hitIdsBuffer
     }
 
     private fun isStrokeHitByCircle(
@@ -94,7 +118,7 @@ class Quadtree private constructor(
         val hitThreshold = radius + visualHalfWidth
 
         if (pts.size == 1) {
-            return hypot(pts[0].x - cx, pts[0].y - cy) <= hitThreshold
+            return hypotFast(pts[0].x - cx, pts[0].y - cy) <= hitThreshold
         }
 
         for (i in 1 until pts.size) {
@@ -119,12 +143,12 @@ class Quadtree private constructor(
         val dy = y2 - y1
         val lenSq = dx * dx + dy * dy
         if (lenSq < 1e-9) {
-            return hypot(px - x1, py - y1)
+            return hypotFast(px - x1, py - y1)
         }
         val t = (((px - x1) * dx + (py - y1) * dy) / lenSq).coerceIn(0.0, 1.0)
         val projX = x1 + t * dx
         val projY = y1 + t * dy
-        return hypot(px - projX, py - projY)
+        return hypotFast(px - projX, py - projY)
     }
 
     private class Node(
@@ -134,31 +158,31 @@ class Quadtree private constructor(
         private val items = ArrayList<Stroke>(MAX_ITEMS_PER_NODE)
         private var children: Array<Node>? = null
 
-        fun insert(stroke: Stroke) {
+        /**
+         * Вставляет штрих и обновляет [onRelocate] для самого штриха и всех
+         * перемещённых при subdivide items. Возвращаемое значение не используется
+         * вызывающим — актуальный узел доступен через [onRelocate].
+         */
+        fun insert(stroke: Stroke, onRelocate: (Long, Node) -> Unit) {
             val kids = children
             if (kids != null) {
                 val childIndex = getChildIndex(stroke.bounds)
                 if (childIndex != -1) {
-                    kids[childIndex].insert(stroke)
+                    kids[childIndex].insert(stroke, onRelocate)
                     return
                 }
             }
 
             items.add(stroke)
+            onRelocate(stroke.id, this)
 
             if (children == null && items.size > MAX_ITEMS_PER_NODE && depth < MAX_DEPTH) {
-                subdivide()
-                var i = 0
-                while (i < items.size) {
-                    val idx = getChildIndex(items[i].bounds)
-                    if (idx != -1) {
-                        val moved = items.removeAt(i)
-                        children!![idx].insert(moved)
-                    } else {
-                        i++
-                    }
-                }
+                subdivide(onRelocate)
             }
+        }
+
+        fun removeItem(strokeId: Long) {
+            items.removeAll { it.id == strokeId }
         }
 
         fun query(area: WorldBounds, result: MutableList<Stroke>) {
@@ -177,16 +201,29 @@ class Quadtree private constructor(
             }
         }
 
-        private fun subdivide() {
+        private fun subdivide(onRelocate: (Long, Node) -> Unit) {
             val cx = bounds.centerX
             val cy = bounds.centerY
             val nextDepth = depth + 1
-            children = arrayOf(
+            val kids = arrayOf(
                 Node(WorldBounds(bounds.minX, bounds.minY, cx, cy), nextDepth),
                 Node(WorldBounds(cx, bounds.minY, bounds.maxX, cy), nextDepth),
                 Node(WorldBounds(bounds.minX, cy, cx, bounds.maxY), nextDepth),
                 Node(WorldBounds(cx, cy, bounds.maxX, bounds.maxY), nextDepth)
             )
+            children = kids
+
+            var i = 0
+            while (i < items.size) {
+                val item = items[i]
+                val childIndex = getChildIndex(item.bounds)
+                if (childIndex != -1) {
+                    items.removeAt(i)
+                    kids[childIndex].insert(item, onRelocate)
+                } else {
+                    i++
+                }
+            }
         }
 
         private fun getChildIndex(itemBounds: WorldBounds): Int {
@@ -200,3 +237,5 @@ class Quadtree private constructor(
         }
     }
 }
+
+private fun hypotFast(dx: Double, dy: Double): Double = sqrt(dx * dx + dy * dy)

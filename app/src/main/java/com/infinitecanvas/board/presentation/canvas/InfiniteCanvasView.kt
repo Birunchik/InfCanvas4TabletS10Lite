@@ -131,6 +131,7 @@ fun InfiniteCanvasView(
             maxY = worldBottom + abs(gestureHandler.selectionDragDy)
         )
         quadtree.query(queryBounds, renderState.visibleStrokesBuffer)
+        renderState.visibleStrokesBuffer.sortBy { it.id }
 
         withTransform({
             translate(

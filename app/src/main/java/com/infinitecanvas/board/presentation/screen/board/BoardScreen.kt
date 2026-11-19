@@ -20,6 +20,8 @@ import com.infinitecanvas.board.presentation.screen.board.huds.BoardMediaHud
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardTopBar
 import com.infinitecanvas.board.presentation.screen.board.huds.CanvasLayer
 
+// Экран — «склейка» ViewModel и HUD: собственного состояния не хранит, поэтому
+// поворот экрана не сбрасывает инструмент и выделение.
 @Composable
 fun BoardScreen(
     boardId: Long,
@@ -27,10 +29,14 @@ fun BoardScreen(
     imageAssetStorage: ImageAssetStorage,
     onNavigateBack: () -> Unit
 ) {
+    // Ключ boardId: переход на другую доску без пересоздания экрана должен вызвать
+    // openBoard заново (повторный вход в ту же доску ViewModel проигнорирует).
     LaunchedEffect(boardId) {
         viewModel.openBoard(boardId)
     }
 
+    // flush асинхронен: back (системный или кнопка) навигирует только после записи.
+    // Флага «выход уже начат» нет, поэтому повторный back запустит flush ещё раз.
     val handleExit: () -> Unit = {
         viewModel.flushSaveAndThumbnail {
             onNavigateBack()
@@ -48,6 +54,8 @@ fun BoardScreen(
     val selectedStrokeIds by viewModel.selectedStrokeIds.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
     val isSelectedImagePinned by viewModel.isSelectedImagePinned.collectAsState()
+    // Отдельный поток только со scale: панорамирование не пересобирает BoardScreen,
+    // HUD обновляется лишь при смене масштаба.
     val zoomScale by viewModel.zoomScale.collectAsState()
 
     val hasSelectedImage by viewModel.hasSelectedImage.collectAsState()

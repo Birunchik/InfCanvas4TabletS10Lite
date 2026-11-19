@@ -20,6 +20,9 @@ import kotlinx.coroutines.withContext
 
 /**
   Высокоскоростное бинарное хранилище геометрии досок и метаданных изображений.
+ *
+ * Формат: DataOutputStream (big-endian), порядок полей фиксирован. Любое изменение
+ * раскладки требует ++FORMAT_VERSION и ветки чтения старых версий.
  */
 class BoardFileStorage(context: Context) {
 
@@ -36,6 +39,9 @@ class BoardFileStorage(context: Context) {
 
     private fun getBoardFile(boardId: Long): File = File(boardsDir, "board_$boardId.bin")
 
+    // Запись идёт в .tmp и только потом заменяет целевой файл: обрыв не оставит
+    // полузаписанный .bin. fsync нет — при потере питания можно потерять последнюю
+    // запись, а окно между delete и renameTo не атомарно.
     suspend fun writeBoardPayload(
         boardId: Long,
         strokes: List<Stroke>,
@@ -46,6 +52,8 @@ class BoardFileStorage(context: Context) {
         val tempFile = File(boardsDir, "board_$boardId.tmp")
 
         DataOutputStream(BufferedOutputStream(FileOutputStream(tempFile), 32 * 1024)).use { out ->
+            // Порядок полей — часть контракта файла: viewport → штрихи → изображения.
+            // Внутри штриха brush.ordinal пишется Int, поэтому enum нельзя переставлять.
             out.writeInt(MAGIC_HEADER)
             out.writeInt(FORMAT_VERSION)
 
@@ -104,6 +112,9 @@ class BoardFileStorage(context: Context) {
         tempFile.renameTo(targetFile)
     }
 
+    // Неверный MAGIC или версия не бросают исключение, а дают пустую доску:
+    // приложение должно открыться даже при повреждённом хранилище.
+    // Обрезанный файл так не обрабатывается — чтение упадёт с EOFException.
     suspend fun readBoardPayload(boardId: Long): StoredCanvasPayload = withContext(Dispatchers.IO) {
         val file = getBoardFile(boardId)
         if (!file.exists() || file.length() == 0L) {
@@ -126,6 +137,8 @@ class BoardFileStorage(context: Context) {
                 scale = input.readDouble()
             )
 
+            // ordinal из файла может выйти за границы enum (файл новее): coerceIn
+            // предотвращает краш ценой подмены типа последним элементом.
             val brushTypes = BrushType.entries
             val strokeCount = input.readInt()
             val strokes = ArrayList<Stroke>(strokeCount)
@@ -137,6 +150,9 @@ class BoardFileStorage(context: Context) {
                 val baseSize = input.readFloat()
                 val opacity = input.readFloat()
 
+                // В v1..v3 ordinal 2 — PENCIL. Ветка нужна для совместимости: старые
+                // файлы читаются как полупрозрачный BALLPOINT, а не как текущий PENCIL.
+                // Коэффициент 0.45 подобран под прежний вид и зажат в 0.1..1.
                 // Миграция удалённого BrushType.PENCIL (индекс 2 в v1..v3) в полупрозрачный BALLPOINT
                 val brush = if (version < 4 && rawTypeOrdinal == 2) {
                     Brush(
@@ -163,6 +179,8 @@ class BoardFileStorage(context: Context) {
 
                 val pointCount = input.readInt()
                 val points = ArrayList<StrokePoint>(pointCount)
+                // В v1..v3 timestamp не писался: 0 означает «нет данных». Потребители
+                // (рендер/превью) должны сами подставлять дефолтный dt, а не делить на 0.
                 for (j in 0 until pointCount) {
                     points.add(
                         StrokePoint(
@@ -217,6 +235,8 @@ class BoardFileStorage(context: Context) {
         getThumbnailFile(boardId).delete()
     }
 
+    // MAGIC — "ICB1" в big-endian. FORMAT_VERSION увеличивается при смене
+    // раскладки; чтение поддерживает 1..текущую.
     private companion object {
         const val MAGIC_HEADER = 0x49434231 // "ICB1"
         const val FORMAT_VERSION = 4

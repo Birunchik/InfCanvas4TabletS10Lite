@@ -31,6 +31,8 @@ fun DrawScope.drawUnpinnedImages(
         val img = images[i]
         if (img.isPinned) continue
 
+        // Preview-bounds из gesture handler: модель обновляется только по отпускании,
+        // а картинка должна ехать на каждом кадре драга/ресайза.
         val effectiveBounds = if (gestureHandler.previewImageId == img.id &&
             gestureHandler.previewImageBounds != null
         ) {
@@ -39,6 +41,7 @@ fun DrawScope.drawUnpinnedImages(
             img.bounds
         }
 
+        // Отсечение до getOrLoad: иначе фото за пределами экрана запускали бы decode из draw-фазы.
         if (effectiveBounds.maxX < worldLeft || effectiveBounds.minX > worldRight ||
             effectiveBounds.maxY < worldTop || effectiveBounds.minY > worldBottom
         ) {
@@ -59,6 +62,7 @@ fun DrawScope.drawUnpinnedImages(
                 dstSize = IntSize(widthPx.roundToInt(), heightPx.roundToInt())
             )
         } else {
+            // getOrLoad из draw-фазы — побочный эффект, но decode идёт в IO; перерисовку разбудит onImageLoaded.
             drawRect(
                 color = Color(0x1A1B6EF3),
                 topLeft = Offset(effectiveBounds.minX.toFloat(), effectiveBounds.minY.toFloat()),
@@ -83,6 +87,7 @@ fun DrawScope.drawPinnedImages(
         val img = images[i]
         if (!img.isPinned) continue
 
+        // Pinned-bounds уже в screen px и не проходят через worldToScreen: иначе фото уехало бы при зуме.
         val effectiveBounds = if (gestureHandler.previewImageId == img.id &&
             gestureHandler.previewImageBounds != null
         ) {

@@ -20,11 +20,16 @@ import kotlin.math.sqrt
  * за пределами этого диапазона, попадают в корневой узел и будут возвращаться
  * `query` только при пересечении root bounds — типичный сценарий (viewport
  * zoom 0.15–8×) гарантированно укладывается внутрь.
+ *
+ * Штрих хранится в узле, который ПОЛНОСТЬЮ содержит его bounds; иначе остаётся
+ * в родителе. query обязан обходить items родителя и детей, а не только листья.
  */
 class Quadtree private constructor(
     private var root: Node
 ) {
     companion object {
+        // Ограничения узла: 8 элементов до деления, глубина 20. При большем числе
+        // совпадающих bounds потомки не создаются — узел хранит все штрихи списком.
         private const val MAX_ITEMS_PER_NODE = 8
         private const val MAX_DEPTH = 20
         private const val DEFAULT_HALF_SIZE = 1_000_000.0
@@ -58,12 +63,17 @@ class Quadtree private constructor(
         root.insert(stroke) { id, node -> nodeById[id] = node }
     }
 
+    // Узлы после удаления не схлопываются: дерево остаётся раздробленным до
+    // полной пересборки через build(); это приемлемо, пока удаления не массовые.
     /** Удаляет штрих по id. No-op, если id отсутствует. */
     fun remove(strokeId: Long) {
         val node = nodeById.remove(strokeId) ?: return
         node.removeItem(strokeId)
     }
 
+    // Заполняет result, а не возвращает новый список: буфер переиспользуется
+    // в draw-pass. Обход идёт сверху вниз, поэтому в результат попадают и items
+    // родительских узлов — не только листьев.
     fun query(area: WorldBounds, result: MutableList<Stroke>) {
         result.clear()
         root.query(area, result)
@@ -75,6 +85,9 @@ class Quadtree private constructor(
      * WARNING: возвращает view на [hitIdsBuffer] — валиден только до следующего
      * вызова [findHitStrokeIds] с тем же буфером. Потребитель должен обработать
      * результат синхронно, до возврата из текущего кадра.
+     *
+     * Запас поиска — половина максимальной ширины штриха (highlighter ×6): без него
+     * широкий мазок не попадёт в выборку, хотя визуально касается ластика.
      */
     fun findHitStrokeIds(
         worldX: Double,
@@ -101,6 +114,8 @@ class Quadtree private constructor(
         return hitIdsBuffer
     }
 
+    // Ширины приближённо повторяют рендерер (с запасом). Проверяем расстояние до
+    // отрезков, а не точек: между сэмплами штрих может быть длинным и прямым.
     private fun isStrokeHitByCircle(
         stroke: Stroke,
         cx: Double,
@@ -175,6 +190,8 @@ class Quadtree private constructor(
                 }
             }
 
+            // В ребёнка пускаем только при полном contains; иначе штрих остаётся
+            // здесь — иначе query потеряет его на границе квадрантов.
             items.add(stroke)
             onRelocate(stroke.id, this)
 
@@ -203,6 +220,8 @@ class Quadtree private constructor(
             }
         }
 
+        // children публикуется до перекладывания: insert рекурсивно может снова
+        // subdivide, и getChildIndex должен видеть уже созданных детей.
         private fun subdivide(onRelocate: (Long, Node) -> Unit) {
             val cx = bounds.centerX
             val cy = bounds.centerY

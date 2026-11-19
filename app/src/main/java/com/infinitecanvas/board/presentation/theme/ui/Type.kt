@@ -7,6 +7,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // Set of Material typography styles to start with
+// Переопределён только bodyLarge: остальные стили остаются дефолтными Material 3,
+// поэтому новый текстовый стиль сначала ищем в Typography, а не создаём TextStyle на месте
 val Typography = Typography(
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,

@@ -8,6 +8,8 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import kotlin.math.floor
 import kotlin.math.round
 
+// Все линии собираются в два Path и рисуются двумя drawPath: drawLine на каждую — лишние
+// вызовы канвы. Координаты screen-space, поэтому толщина линий не зависит от масштаба.
 fun DrawScope.drawBatchedWorldGrid(
     viewportState: ViewportState,
     worldLeft: Double,
@@ -25,6 +27,7 @@ fun DrawScope.drawBatchedWorldGrid(
     val majorStep = fixedStep * 5.0
 
     val visibleColumns = (worldRight - worldLeft) / fixedStep
+    // При зуме-ауте шаг 50 → 250: иначе число линий растёт как 1/scale и кадр упирается в растеризацию.
     val effectiveStep = if (visibleColumns > 250.0) majorStep else fixedStep
 
     val firstGridX = floor(worldLeft / effectiveStep) * effectiveStep

@@ -15,12 +15,16 @@ import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
 import com.infinitecanvas.board.data.repository.BoardRepositoryImpl
 import com.infinitecanvas.board.presentation.navigation.AppNavHost
 
+// Точка сборки зависимостей: DI-фреймворка нет, поэтому всё создаётся здесь
+// один раз на Activity и переживает пересоздание Compose-дерева, но не процесса.
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         // Ограничиваем кэш изображений Coil под 6/8 ГБ RAM Tab S10 Lite (15% доступной памяти)
+        // ImageLoader задаётся глобально до setContent: без этого Coil создаст
+        // дефолтный кэш, и ограничение памяти ниже не применится к превью.
         val imageLoader = ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
@@ -30,6 +34,8 @@ class MainActivity : ComponentActivity() {
             .build()
         Coil.setImageLoader(imageLoader)
 
+        // Room хранит только метаданные, геометрия — в файлах (BoardFileStorage):
+        // согласованность этих двух хранилищ обеспечивает репозиторий, не Room.
         val database = AppDatabase.getInstance(applicationContext)
         val fileStorage = BoardFileStorage(applicationContext)
         val imageAssetStorage = ImageAssetStorage(applicationContext)
@@ -43,6 +49,8 @@ class MainActivity : ComponentActivity() {
             imageAssetStorage = imageAssetStorage
         )
 
+        // Зависимости передаются готовыми: контент setContent пересоздаётся при
+        // рекомпозиции, а создавать Room/репозиторий внутри composable нельзя — дубликаты.
         setContent {
             MaterialTheme {
                 AppNavHost(

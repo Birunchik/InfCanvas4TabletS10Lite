@@ -34,6 +34,8 @@ import com.infinitecanvas.board.R
 import kotlin.math.roundToInt
 
 @Composable
+// Состав кнопок зависит от выделения; штрихи и картинка взаимоисключающие
+// (контроллеры сбрасывают чужое выделение), поэтому блоки не дублируются.
 internal fun BoardBottomHud(
     zoom: Double,
     isZoomLocked: Boolean,
@@ -154,9 +156,13 @@ internal fun BoardBottomHud(
                 )
             }
 
+            // zoom — множитель (1.0 = 100 %), а не проценты; roundToInt убирает 99 %
+            // из-за погрешности Double при пересчёте масштаба.
             val zoomPercent = (zoom * 100).roundToInt()
 
             IconButton(
+                // Lock отключает только масштаб: pan продолжает применяться, поэтому доска
+                // остаётся подвижной при заблокированном зуме.
                 onClick = onToggleZoomLock,
                 modifier = Modifier.size(36.dp)
             ) {

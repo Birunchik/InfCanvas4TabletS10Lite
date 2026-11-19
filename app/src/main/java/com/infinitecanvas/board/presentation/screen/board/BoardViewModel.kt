@@ -28,6 +28,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
+// Контроллеры — единственный источник состояния; ViewModel не держит копий
+// штрихов/картинок и лишь связывает их колбэками, поэтому flush читает их снапшоты.
 class BoardViewModel(
     private val repository: BoardRepository,
     private val thumbnailGenerator: ThumbnailGenerator,
@@ -35,6 +37,8 @@ class BoardViewModel(
 ) : ViewModel() {
 
     private var currentBoardId: Long? = null
+    // Один активный Job на все правки: scheduleAutoSave отменяет предыдущий,
+    // то есть это дебаунс, а не очередь последовательных записей.
     private var autoSaveJob: Job? = null
     private var hasUnsavedChanges: Boolean = false
 
@@ -96,6 +100,8 @@ class BoardViewModel(
     val selectedPresetIndex = toolController.selectedPresetIndex
 
     // --- Жизненный цикл и сохранение доски ---
+    // Повторное открытие уже загруженной доски — no-op: setInitial* сбросил бы
+    // undo-стек и выделение, хотя пользователь просто вернулся на тот же boardId.
     fun openBoard(boardId: Long) {
         if (currentBoardId == boardId && !_isLoading.value) return
         viewModelScope.launch {
@@ -113,17 +119,23 @@ class BoardViewModel(
         }
     }
 
+    // Снапшоты снимаются до launch: пока идёт запись, пользователь может рисовать,
+    // а сохраняться должно состояние на момент выхода.
     fun flushSaveAndThumbnail(onFinished: (() -> Unit)? = null) {
         val boardId = currentBoardId ?: run {
             onFinished?.invoke()
             return
         }
+        // Отменяем отложенный автосейв: иначе после flush сработает ещё одна запись
+        // той же доски, и порядок «кто последний» станет неопределённым.
         autoSaveJob?.cancel()
         val strokesSnapshot = strokes.value
         val imagesSnapshot = images.value
         val viewportSnapshot = viewportState.value
 
         viewModelScope.launch {
+            // NonCancellable: отмена scope (onCleared) не должна оборвать запись на середине —
+            // файл и строка Room пишутся без общей транзакции, и половина хуже отсутствия.
             withContext(NonCancellable) {
                 val thumbPath = thumbnailGenerator.generateAndSave(
                     boardId = boardId,
@@ -143,6 +155,8 @@ class BoardViewModel(
         }
     }
 
+    // Дебаунс 1.5 с: таймер перезапускается на каждое изменение. Миниатюра — только
+    // при контентных правках: пан/зум меняют лишь viewport и её не требуют.
     private fun scheduleAutoSave(regenerateThumbnail: Boolean) {
         val boardId = currentBoardId ?: return
         hasUnsavedChanges = true
@@ -172,6 +186,8 @@ class BoardViewModel(
         }
     }
 
+    // Размер и кламп идут парой: controller запоминает размер экрана (нужен вставке
+    // картинок и отпину), а pinned-картинки сразу вписываются в новые границы.
     fun updateCanvasViewportSize(widthPx: Int, heightPx: Int) {
         viewportController.updateCanvasSize(widthPx, heightPx)
         imageController.clampPinnedImagesToViewport(widthPx, heightPx)
@@ -184,6 +200,8 @@ class BoardViewModel(
     fun resetViewport() = viewportController.resetViewport()
 
     fun createTempCameraFile(): File = imageController.createTempCameraFile()
+    // boardId может прийти раньше openBoard (камера/галерея на старте), поэтому
+    // запоминаем его — иначе автосейв не узнает текущую доску.
     fun insertImageFromUri(boardId: Long, uri: Uri) {
         if (boardId > 0L && currentBoardId == null) currentBoardId = boardId
         imageController.insertImageFromUri(boardId, uri)
@@ -227,6 +245,8 @@ class BoardViewModel(
     }
 
     @SuppressLint("EmptySuperCall")
+    // Этот flush уже не сработает: viewModelScope отменяется до onCleared, и launch
+    // внутри не выполнится. Надёжное сохранение — только явный выход через handleExit.
     override fun onCleared() {
         super.onCleared()
         if (hasUnsavedChanges) {

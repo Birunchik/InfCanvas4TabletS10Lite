@@ -1,5 +1,7 @@
 package com.infinitecanvas.board.domain.model
 
+// bounds — мировые координаты, но при isPinned=true они хранятся в экранных px:
+// закреплённая картинка не сдвигается вместе с холстом (см. ImageGestureHandler).
 data class BoardImage(
     val id: Long,
     val fileName: String,

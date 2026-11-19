@@ -11,6 +11,7 @@ import com.infinitecanvas.board.presentation.canvas.buildGeometry
  * количества точек. Инвалидируется при count == 0.
  */
 class ActiveStrokeCache {
+    // Ключ — только pointCount: точки мутируются в том же списке, и сравнение содержимого было бы O(n) на кадр.
     var pointCount: Int = -1
     var geometry: CachedStrokeGeometry? = null
 
@@ -31,6 +32,7 @@ fun DrawScope.drawActiveStroke(
     cache: ActiveStrokeCache
 ) {
     if (activePointCount > 0) {
+        // Пересборка при смене pointCount — O(n): на длинном штрихе каждый новый сэмпл дороже предыдущего.
         val geom = if (activePointCount == cache.pointCount && cache.geometry != null) {
             cache.geometry!!
         } else {

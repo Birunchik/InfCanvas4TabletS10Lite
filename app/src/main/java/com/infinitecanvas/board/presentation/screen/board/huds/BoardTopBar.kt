@@ -31,6 +31,8 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.CanvasTool
 
 @Composable
+// Панель stateless: инструмент и цвет приходят из StateFlow, действия — колбэками;
+// локальный remember здесь разошёлся бы с ViewModel.
 internal fun BoardTopBar(
     activeTool: CanvasTool,
     activeBrush: Brush,
@@ -146,6 +148,8 @@ internal fun BoardTopBar(
 }
 
 @Composable
+// Подсветка чипа требует одновременно BRUSH и совпадения типа: при ERASER/LASSO
+// Brush.type сохраняется, но выбранным не должен выглядеть ни один чип.
 private fun BrushSelector(
     activeTool: CanvasTool,
     activeBrush: Brush,
@@ -170,6 +174,8 @@ private fun BrushSelector(
 }
 
 @Composable
+// Слайдер отдаёт сырые px; снап к кратным 2 и кламп 2..24 делает ViewModel,
+// поэтому coerceIn здесь — только защита отображения.
 private fun BrushSizeSlider(
     currentSize: Float,
     onSizeChanged: (Float) -> Unit
@@ -186,6 +192,8 @@ private fun BrushSizeSlider(
             value = currentSize.coerceIn(2f, 36f),
             onValueChange = onSizeChanged,
             valueRange = 2f..36f,
+            // steps=16 даёт 18 позиций с шагом 2 px (34/17) — та же сетка, что у снапа
+            // в ViewModel, иначе значение «прыгало» бы между позициями.
             steps = 16,
             modifier = Modifier.height(32.dp)
         )

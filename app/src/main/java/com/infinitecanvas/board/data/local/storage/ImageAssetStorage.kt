@@ -18,6 +18,9 @@ import androidx.core.graphics.scale
 /**
  * Управляет импортом изображений из галереи или камеры во внутреннее хранилище доски
  * с обязательным даунсэмплингом до 1600 px и учётом EXIF-ориентации.
+ *
+ * Все операции с файлами — на Dispatchers.IO: decode/compress блокируют поток.
+ * Локальная копия нужна, потому что доступ к content Uri живёт не вечно.
  */
 class ImageAssetStorage(private val context: Context) {
 
@@ -45,6 +48,9 @@ class ImageAssetStorage(private val context: Context) {
 
     /**
      * Импортирует изображение по Uri (из галереи или камеры), сжимает и сохраняет в папку доски.
+     *
+     * Порядок критичен: сначала копируем Uri в cache, пока permission валиден,
+     * и только потом decodeFile. Повторное открытие Uri после рестарта может упасть.
      */
     suspend fun importFromUri(boardId: Long, sourceUri: Uri): ImportedImageResult? =
         withContext(Dispatchers.IO) {
@@ -70,6 +76,8 @@ class ImageAssetStorage(private val context: Context) {
             }
 
             try {
+                // inJustDecodeBounds читает только заголовок: bitmap не аллоцируется,
+                // поэтому размеры можно узнать до решения о inSampleSize.
                 // 2. Читаем размеры из локального временного файла
                 val boundsOptions = BitmapFactory.Options().apply {
                     inJustDecodeBounds = true
@@ -80,6 +88,8 @@ class ImageAssetStorage(private val context: Context) {
                 val srcHeight = boundsOptions.outHeight
                 if (srcWidth <= 0 || srcHeight <= 0) return@withContext null
 
+                // EXIF читаем из локальной копии, а не из потока Uri: файл можно
+                // переоткрыть. Поддержаны только повороты 90/180/270, не зеркала.
                 // 3. Читаем EXIF-поворот из временного файла
                 val rotationDegrees = try {
                     val exif = ExifInterface(tempInputFile.absolutePath)
@@ -93,16 +103,21 @@ class ImageAssetStorage(private val context: Context) {
                     0
                 }
 
+                // inSampleSize — только степень двойки, поэтому декод может быть
+                // чуть больше 1600 px; точный размер доводится scale() ниже.
                 // 4. Декодируем с оптимальным inSampleSize
                 val decodeOptions = BitmapFactory.Options().apply {
                     inSampleSize = calculateInSampleSize(srcWidth, srcHeight, MAX_DIMENSION_PX)
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
+                // null — битый/неподдерживаемый файл: выходим, temp удалится в finally.
                 var processedBitmap = BitmapFactory.decodeFile(tempInputFile.absolutePath, decodeOptions)
                     ?: return@withContext null
 
                 try {
                     // Поворачиваем согласно EXIF, если нужно
+                    // createBitmap с Matrix может вернуть исходный объект, поэтому
+                    // старый bitmap освобождаем только при другом instance.
                     if (rotationDegrees != 0) {
                         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
                         val rotated = Bitmap.createBitmap(
@@ -122,6 +137,8 @@ class ImageAssetStorage(private val context: Context) {
 
                     // Точное масштабирование до MAX_DIMENSION_PX по длинной стороне
                     val maxSide = max(processedBitmap.width, processedBitmap.height)
+                    // Точный ресайз после поворота: EXIF мог поменять местами стороны,
+                    // поэтому maxSide считается уже у повёрнутого bitmap.
                     if (maxSide > MAX_DIMENSION_PX) {
                         val scale = MAX_DIMENSION_PX.toFloat() / maxSide.toFloat()
                         val targetW = (processedBitmap.width * scale).roundToInt().coerceAtLeast(1)
@@ -151,6 +168,8 @@ class ImageAssetStorage(private val context: Context) {
                         heightPx = processedBitmap.height
                     )
                 } finally {
+                    // Bitmap живёт в native heap: без recycle память не вернётся сразу.
+                    // Проверка isRecycled защищает от повторного освобождения.
                     if (!processedBitmap.isRecycled) {
                         processedBitmap.recycle()
                     }
@@ -176,6 +195,8 @@ class ImageAssetStorage(private val context: Context) {
             dir.deleteRecursively()
         }
     }
+    // Уменьшаем вдвое, пока следующее деление не станет меньше reqMaxSide:
+    // минимальный inSampleSize, при котором длинная сторона ещё >= цели.
     private fun calculateInSampleSize(width: Int, height: Int, reqMaxSide: Int): Int {
         var inSampleSize = 1
         val maxSide = max(width, height)

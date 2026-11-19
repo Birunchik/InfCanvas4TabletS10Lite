@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.PathEffect
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
 
+// Один экземпляр на Canvas: Path и буферы переживают кадр, поэтому наружу их отдавать нельзя.
 /**
  * Держит все аллоцируемые на кадр объекты и состояние инвалидации,
  * которое Canvas читает, чтобы перерисоваться при мутации gesture handler.
@@ -20,6 +21,7 @@ class CanvasRenderState {
     val minorGridPath = Path()
     val majorGridPath = Path()
 
+    // Ёмкость с запасом: clear() не освобождает массив, поэтому после прогрева query не аллоцирует.
     val visibleStrokesBuffer = ArrayList<Stroke>(128)
     val draggedStrokesBuffer = ArrayList<Stroke>(64)
 
@@ -37,6 +39,8 @@ class CanvasRenderState {
     fun worldDashEffect(currentScale: Float): PathEffect {
         val cached = worldDashCache
         if (cached != null && dashScale == currentScale) return cached
+        // Делим длины на масштаб: PathEffect задаётся в world-единицах, и без этого пунктир
+        // на экране растягивался бы вместе с зумом.
         dashScale = currentScale
         return PathEffect.dashPathEffect(
             floatArrayOf(14f / currentScale, 10f / currentScale),

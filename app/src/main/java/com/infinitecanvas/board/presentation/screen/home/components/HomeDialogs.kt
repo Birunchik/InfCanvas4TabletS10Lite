@@ -33,6 +33,7 @@ internal fun TextInputDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
+    // remember без ключей: поле инициализируется один раз, иначе ввод сбрасывался бы на каждой рекомпозиции
     var text by remember { mutableStateOf(initialValue) }
 
     AlertDialog(
@@ -49,6 +50,7 @@ internal fun TextInputDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(text) },
+                // Проверяем trim, а не isNotEmpty: имя из одних пробелов не должно считаться валидным
                 enabled = text.trim().isNotEmpty()
             ) {
                 Text(confirmLabel)
@@ -69,6 +71,7 @@ internal fun MoveToFolderDialog(
     onDismiss: () -> Unit,
     onSelectFolder: (Long?) -> Unit
 ) {
+    // null — это «Без папки», поэтому тип nullable, а стартуем с текущей папки доски
     var selectedId by remember { mutableStateOf(currentFolderId) }
 
     AlertDialog(

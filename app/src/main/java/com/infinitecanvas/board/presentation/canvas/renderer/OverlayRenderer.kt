@@ -12,6 +12,8 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.CanvasGestureHandler
 
+// Всё в screen-space и после withTransform: оверлеи не должны масштабироваться,
+// поэтому world→screen считаем вручную и не переиспользуем трансформ холста.
 fun DrawScope.drawScreenOverlays(
     viewportState: ViewportState,
     gestureHandler: CanvasGestureHandler,
@@ -32,6 +34,7 @@ fun DrawScope.drawScreenOverlays(
             } else {
                 selImg.bounds
             }
+            // Pinned-bounds уже в screen px, обычные — в world: поэтому worldToScreen только для незакреплённых.
             val left = if (selImg.isPinned) b.minX.toFloat() else viewportState.worldToScreenX(b.minX)
             val top = if (selImg.isPinned) b.minY.toFloat() else viewportState.worldToScreenY(b.minY)
             val right = if (selImg.isPinned) b.maxX.toFloat() else viewportState.worldToScreenX(b.maxX)
@@ -65,6 +68,7 @@ fun DrawScope.drawScreenOverlays(
 
     // 2. HUD лассо-выделения штрихов
     if (selectionBounds != null && selectedStrokeIds.isNotEmpty()) {
+        // К bounds прибавляем текущий драг: модель ещё не обновлена, а рамка должна ехать вместе со штрихами.
         val left = viewportState.worldToScreenX(selectionBounds.minX + gestureHandler.selectionDragDx)
         val top = viewportState.worldToScreenY(selectionBounds.minY + gestureHandler.selectionDragDy)
         val right = viewportState.worldToScreenX(selectionBounds.maxX + gestureHandler.selectionDragDx)
@@ -85,6 +89,7 @@ fun DrawScope.drawScreenOverlays(
 
     // 3. Курсор ластика
     val cursor = gestureHandler.eraserScreenPos
+    // Радиус 22 px — визуальный ориентир, а не точная зона: world-радиус ластика равен 18/scale.
     if (cursor != null) {
         drawCircle(color = Color(0x33838383), radius = 22f, center = cursor)
         drawCircle(

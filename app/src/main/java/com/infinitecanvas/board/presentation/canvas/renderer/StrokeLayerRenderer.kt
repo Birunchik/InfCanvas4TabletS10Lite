@@ -7,6 +7,8 @@ import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
 
+// Два прохода, highlighters первыми: они полупрозрачные и должны лежать под остальными,
+// порядок задаёт тип кисти, а не id.
 fun DrawScope.drawStrokeLayers(
     visibleStrokes: List<Stroke>,
     selectedStrokeIds: Set<Long>,
@@ -33,6 +35,8 @@ fun DrawScope.drawStrokeLayers(
         return
     }
 
+    // При драге выделенные штрихи вынимаются из общего прохода и рисуются последними,
+    // иначе они были бы под невыделенными соседями.
     draggedStrokesBuffer.clear()
     for (i in visibleStrokes.indices) {
         val stroke = visibleStrokes[i]
@@ -52,6 +56,8 @@ fun DrawScope.drawStrokeLayers(
     if (draggedStrokesBuffer.isNotEmpty()) {
         // Смещаем видимые границы на вектор перетаскивания, чтобы сегменты
         // внутри перетаскиваемых штрихов корректно отсекались относительно экрана
+        // Минус, потому что внутри translate координаты локальные: экранные границы возвращаем
+        // в систему до сдвига, иначе сегменты на краю пропадали бы во время драга.
         val shiftedVisibleBounds = visibleWorldBounds?.let { b ->
             WorldBounds(
                 minX = b.minX - selectionDragDx,

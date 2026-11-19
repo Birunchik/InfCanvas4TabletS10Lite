@@ -29,6 +29,10 @@ import com.infinitecanvas.board.presentation.canvas.renderer.drawUnpinnedImages
 import com.infinitecanvas.board.presentation.canvas.renderer.rememberCanvasRenderState
 import kotlin.math.abs
 
+/**
+ * Весь холст — один Canvas: слои рисуются вручную в фиксированном порядке,
+ * чтобы на кадр приходился один draw-проход и одна композиция, а не семь слоёв.
+ */
 @Composable
 fun InfiniteCanvasView(
     quadtree: Quadtree,
@@ -80,6 +84,7 @@ fun InfiniteCanvasView(
         onTransform = onTransform
     )
 
+    // Нижняя граница масштаба: при scale → 0 ширина лассо (2.5f / scale) улетела бы в бесконечность.
     val currentScaleFloat = viewportState.scale.toFloat().coerceAtLeast(0.1f)
 
     Canvas(
@@ -92,6 +97,7 @@ fun InfiniteCanvasView(
             .canvasGestures(gestureHandler, renderState.pathCache)
     ) {
         // Читаем activeTick: Canvas перерисуется при мутации gesture handler.
+        // Мутация состояния сама по себе отрисовку не инвалидирует — подписка возникает только при чтении в draw-фазе.
         @Suppress("UNUSED_EXPRESSION")
         renderState.activeTick
         // Читаем imageLoadTick: Canvas перерисуется после подгрузки битмапов.
@@ -124,6 +130,8 @@ fun InfiniteCanvasView(
         val isDraggingNow = selectedStrokeIds.isNotEmpty() &&
                 (gestureHandler.selectionDragDx != 0.0 || gestureHandler.selectionDragDy != 0.0)
 
+        // Расширяем запрос на величину драга: выделенные штрихи рисуются со сдвигом, а их bounds
+        // в quadtree и модели ещё старые — иначе у края экрана они выпадали бы из видимого набора.
         val queryBounds = WorldBounds(
             minX = worldLeft - abs(gestureHandler.selectionDragDx),
             minY = worldTop - abs(gestureHandler.selectionDragDy),
@@ -131,8 +139,12 @@ fun InfiniteCanvasView(
             maxY = worldBottom + abs(gestureHandler.selectionDragDy)
         )
         quadtree.query(queryBounds, renderState.visibleStrokesBuffer)
+        // Порядок наложения фиксируем по id: query обходит узлы quadtree,
+        // и без сортировки штрихи могли бы менять порядок между кадрами.
         renderState.visibleStrokesBuffer.sortBy { it.id }
 
+        // translate + scale с pivot = Offset.Zero повторяет ViewportState.worldToScreen*:
+        // менять формулы здесь нельзя, иначе штрихи разъедутся с сеткой, нарисованной в screen-space.
         withTransform({
             translate(
                 left = viewportState.offsetX.toFloat(),
@@ -169,6 +181,8 @@ fun InfiniteCanvasView(
             )
 
             // 4. Активный (рисуемый сейчас) штрих
+            // До коммита его нет в quadtree, поэтому он не попадает в visibleStrokesBuffer
+            // и рисуется отдельным проходом поверх закоммиченных.
             drawActiveStroke(
                 activePointCount = gestureHandler.activePoints.size,
                 createStroke = {
@@ -192,6 +206,7 @@ fun InfiniteCanvasView(
             }
         }
 
+        // Pinned — экранный слой: вне withTransform, поэтому не масштабируется и не панорамируется с холстом.
         // 6. Закреплённые фотографии (floating reference поверх мира)
         drawPinnedImages(
             images = images,

@@ -6,10 +6,14 @@ import com.infinitecanvas.board.domain.model.WorldBounds
 import kotlin.math.max
 import kotlin.math.min
 
+// Чистая геометрия, без знания о UI: на вход мировые координаты и quadtree.
+// Полигон замыкается неявно — ребро из последней точки в первую.
 object LassoSelector {
 
     private const val Y_BUCKETS = 16
 
+    // Сложность ~O(кандидаты * 40): quadtree отсекает по AABB, дальше проверяются
+    // только сэмплы, а не все точки длинного штриха.
     fun findSelectedStrokeIds(
         lassoPolygon: List<StrokePoint>,
         quadtree: Quadtree
@@ -47,6 +51,8 @@ object LassoSelector {
         val edgeYi = DoubleArray(n)
         val edgeSlope = DoubleArray(n)
 
+        // Y-бакеты: ребро попадает во все полосы, которые пересекает по Y, поэтому
+        // для точки проверяются только рёбра её полосы, а не весь полигон.
         val height = (maxY - minY).coerceAtLeast(1e-6)
         val invBucketH = Y_BUCKETS / height
         val buckets = Array(Y_BUCKETS) { IntArray(0) }
@@ -94,6 +100,8 @@ object LassoSelector {
             var inside = false
             for (k in edgeIndices.indices) {
                 val e = edgeIndices[k]
+                // Полуинтервал [minY, maxY) обязателен: иначе вершина на луче
+                // посчитается дважды и чётность inside сломается.
                 if (py >= edgeMinY[e] && py < edgeMaxY[e]) {
                     val intersectX = edgeXi[e] + (py - edgeYi[e]) * edgeSlope[e]
                     if (px < intersectX) {

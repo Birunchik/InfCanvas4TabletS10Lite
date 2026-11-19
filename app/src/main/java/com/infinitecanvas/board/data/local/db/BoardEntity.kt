@@ -7,6 +7,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.infinitecanvas.board.domain.model.BoardSummary
 
+// FK onDelete=SET_NULL: удаление папки не каскадится на доски. Индексы
+// folder_id и updated_at обслуживают фильтр и сортировку списков.
 @Entity(
     tableName = "boards",
     foreignKeys = [
@@ -26,11 +28,13 @@ data class BoardEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
     @ColumnInfo(name = "folder_id")
+    // NULL — валидное состояние «без папки», а не отсутствие данных.
     val folderId: Long? = null,
     val title: String,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "thumbnail_path")
+    // Абсолютный путь к webp в filesDir/thumbnails; вне этого каталога не валиден.
     val thumbnailPath: String? = null,
     @ColumnInfo(name = "strokes_count")
     val strokesCount: Int = 0

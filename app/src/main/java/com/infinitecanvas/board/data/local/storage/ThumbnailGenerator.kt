@@ -22,16 +22,22 @@ import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+// Рендер — CPU-работа (Path/Bitmap), поэтому Dispatchers.Default, а запись файла
+// уходит в IO. Параллельные вызовы для одной доски делят один .tmp — не запускать.
 class ThumbnailGenerator(
     private val fileStorage: BoardFileStorage,
     private val imageAssetStorage: ImageAssetStorage
 ) {
+    // null = видимого контента нет (пустая доска), и файл превью при этом удаляется.
+    // Вызывающий не должен сохранять null как путь: в БД останется ссылка на удалённый файл.
     suspend fun generateAndSave(
         boardId: Long,
         strokes: List<Stroke>,
         images: List<BoardImage> = emptyList()
     ): String? = withContext(Dispatchers.Default) {
         val outFile = fileStorage.getThumbnailFile(boardId)
+        // Закреплённые изображения живут в экранных координатах и не часть мира —
+        // в кадр превью они не входят.
         val worldImages = images.filterNot { it.isPinned }
 
         if (strokes.isEmpty() && worldImages.isEmpty()) {
@@ -39,6 +45,8 @@ class ThumbnailGenerator(
             return@withContext null
         }
 
+        // Кадрируем по содержимому, а не по viewport: превью должно быть читаемым
+        // независимо от того, куда был сдвинут холст в момент сохранения.
         // 1. Вычисляем общий WorldBounds по штрихам и незакреплённым изображениям
         var minX = Double.POSITIVE_INFINITY
         var minY = Double.POSITIVE_INFINITY
@@ -62,9 +70,13 @@ class ThumbnailGenerator(
 
         if (!minX.isFinite() || !minY.isFinite()) return@withContext null
 
+        // Минимум 32 world units защищает от деления на ~0, когда на доске одна
+        // точка или крошечный штрих.
         val contentW = (maxX - minX).coerceAtLeast(32.0)
         val contentH = (maxY - minY).coerceAtLeast(32.0)
 
+        // bitmap освобождается в finally: при исключении иначе утечёт native-память,
+        // а генерация вызывается часто при автосохранении.
         val bitmap = createBitmap(THUMB_WIDTH, THUMB_HEIGHT)
         try {
             val canvas = Canvas(bitmap)
@@ -73,11 +85,15 @@ class ThumbnailGenerator(
 
             val usableW = THUMB_WIDTH - PADDING_PX * 2f
             val usableH = THUMB_HEIGHT - PADDING_PX * 2f
+            // contain-вписывание: min по осям, чтобы содержимое влезло целиком.
+            // clamp 0.02..2.5 страхует от экстремальных мировых координат.
             val scale = min(usableW / contentW.toFloat(), usableH / contentH.toFloat())
                 .coerceIn(0.02f, 2.5f)
 
             val scaledW = contentW.toFloat() * scale
             val scaledH = contentH.toFloat() * scale
+            // Центрируем содержимое в 480×300 и сдвигаем на -min*scale: вместе с
+            // translate/scale ниже это и есть отображение world → пиксели превью.
             val offsetX = (THUMB_WIDTH - scaledW) * 0.5f - (minX.toFloat() * scale)
             val offsetY = (THUMB_HEIGHT - scaledH) * 0.5f - (minY.toFloat() * scale)
 
@@ -85,6 +101,8 @@ class ThumbnailGenerator(
             canvas.translate(offsetX, offsetY)
             canvas.scale(scale, scale)
 
+            // inSampleSize=4 достаточен для 480 px и экономит память; subBitmap
+            // освобождается в finally, иначе при сотнях картинок будет OOM.
             // 2. Сначала рисуем незакреплённые изображения (под штрихами)
             val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
             val dstRect = RectF()
@@ -108,6 +126,8 @@ class ThumbnailGenerator(
                 }
             }
 
+            // Порядок слоёв повторяет холст: изображения под штрихами. Менять
+            // порядок нельзя — превью станет непохожим на доску.
             // 3. Поверх изображений рисуем штрихи
             val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
@@ -120,6 +140,8 @@ class ThumbnailGenerator(
             val reusablePath = Path()
 
             for (i in strokes.indices) {
+                // invScale компенсирует canvas.scale: minVisibleWidth задаётся
+                // в пикселях превью, чтобы тонкие штрихи не исчезали.
                 drawStrokeOnAndroidCanvas(
                     canvas = canvas,
                     stroke = strokes[i],
@@ -131,6 +153,8 @@ class ThumbnailGenerator(
             }
             canvas.restore()
 
+            // Запись — в IO; temp+rename не даёт читателю увидеть недописанный webp.
+            // fsync нет, поэтому при сбое питания файл превью можно потерять.
             withContext(Dispatchers.IO) {
                 val tempFile = File(outFile.parentFile, "${outFile.name}.tmp")
                 FileOutputStream(tempFile).use { fos ->
@@ -178,6 +202,8 @@ class ThumbnailGenerator(
         val brush = stroke.brush
         val minVisibleWidth = 1.35f * invScale
 
+        // Highlighter рисуется через saveLayerAlpha с непрозрачным цветом: иначе
+        // полупрозрачные сегменты складываются и на стыках появляются тёмные пятна.
         if (brush.type == BrushType.HIGHLIGHTER) {
             val layerAlpha = (brush.opacity.coerceIn(0.35f, 0.45f) * 255f)
                 .toInt()
@@ -241,6 +267,8 @@ class ThumbnailGenerator(
         canvas.drawPath(path, fillPaint)
     }
 
+    // Сглаживание pressure/speed — низкочастотный фильтр: без него ширина дёргается
+    // от сэмпла к сэмплу. Контур строится обходом точек слева и справа с общей нормалью.
     private fun buildVariableWidthOutline(
         points: List<StrokePoint>,
         brush: Brush,
@@ -323,6 +351,7 @@ class ThumbnailGenerator(
     }
 
     private companion object {
+        // 480×300 — целевой размер карточки в UI; менять только вместе с версткой.
         const val THUMB_WIDTH = 480
         const val THUMB_HEIGHT = 300
         const val PADDING_PX = 24f

@@ -10,6 +10,8 @@ import androidx.room.RoomDatabase
     version = 1,
     exportSchema = false
 )
+// Схема v1 без миграций: при изменении entities нужен Migration (или явный
+// fallback), иначе Room упадёт у пользователей с уже созданной БД.
 abstract class AppDatabase : RoomDatabase() {
     abstract fun boardDao(): BoardDao
 
@@ -17,6 +19,8 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var instance: AppDatabase? = null
 
+        // Double-checked locking: @Volatile обязателен, иначе возможен доступ к
+        // частично сконструированному instance. Контекст — applicationContext.
         fun getInstance(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(

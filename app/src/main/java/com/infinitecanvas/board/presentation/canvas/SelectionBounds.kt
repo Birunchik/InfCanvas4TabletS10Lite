@@ -3,6 +3,7 @@ package com.infinitecanvas.board.presentation.canvas
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
 
+// Padding в world px: рамка должна масштабироваться вместе с холстом, а не оставаться 8 px на экране.
 private const val SELECTION_PADDING = 8.0
 
 /**
@@ -32,6 +33,7 @@ fun computeSelectionWorldBounds(
         found = true
     }
     if (!found) return null
+    // Те же bounds используются для hit-test драга: padding расширяет зону захвата, а не только рамку.
     return WorldBounds(
         minX = minX - SELECTION_PADDING,
         minY = minY - SELECTION_PADDING,

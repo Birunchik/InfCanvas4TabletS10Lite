@@ -28,8 +28,12 @@ import androidx.core.graphics.createBitmap
 const val HIGHLIGHTER_WIDTH_MULTIPLIER = 6.0f
 const val HIGHLIGHTER_CHISEL_ANGLE_DEG = -30f
 
+// Общий Paint для saveLayer: его alpha мутируется перед каждым highlighter'ом,
+// поэтому опираться на это поле между вызовами нельзя.
 private val highlighterLayerPaint = Paint()
 
+// Chisel-матрица: растягивает путь по Y в 4.5 раза в системе, повёрнутой на -30°,
+// а при отрисовке масштаб сжимается обратно той же парой поворотов.
 private val forwardChiselMatrix = Matrix().apply {
     postRotate(-HIGHLIGHTER_CHISEL_ANGLE_DEG)
     postScale(1f, 4.5f)
@@ -41,6 +45,7 @@ fun applyChiselForwardTransform(path: Path) {
 }
 
 // --- Кэш для обычных Stroke (спасает от аллокаций Paint на каждый кадр) ---
+// Ключ — ширина: она своя у каждого штриха, поэтому HashMap, а не одно поле.
 private val strokeCache = HashMap<Float, Stroke>()
 
 private fun getStroke(width: Float): Stroke {
@@ -50,6 +55,7 @@ private fun getStroke(width: Float): Stroke {
 }
 
 // --- Новая текстура карандаша (очень мелкое зерно) ---
+// Ленивая: 15 000 drawCircle стоят несколько мс, и платить их на старте за неиспользуемый карандаш нельзя.
 private val pencilTextureBitmap: Bitmap by lazy {
     val size = 256
     val bitmap = createBitmap(size, size)
@@ -74,6 +80,8 @@ private val pencilTextureBitmap: Bitmap by lazy {
 
 private val pencilPaintCache = HashMap<Int, android.graphics.Paint>()
 private fun getPencilPaint(colorArgb: Int, strokeWidth: Float, alpha: Float): android.graphics.Paint {
+    // Ключ — только цвет и alpha: ширину менять дёшево, а вот BitmapShader и ColorFilter
+    // создавать в кадре дорого. Возвращённый Paint нельзя хранить — следующий вызов его перезапишет.
     val cacheKey = colorArgb + (alpha * 1000).toInt()
     return pencilPaintCache.getOrPut(cacheKey) {
         val shader = BitmapShader(pencilTextureBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
@@ -98,6 +106,7 @@ fun DrawScope.drawCachedGeometry(
 ) {
     val dotCenter = geom.singleDotCenter
     if (dotCenter != null) {
+        // Точка рисуется кружком: Path у неё пустой, и без раннего возврата мы бы попали в дорогие ветки впустую.
         drawCircle(
             color = geom.color,
             radius = geom.singleDotRadius,
@@ -116,6 +125,8 @@ fun DrawScope.drawCachedGeometry(
         val opaqueColor = geom.color.copy(alpha = 1f)
         highlighterLayerPaint.alpha = geom.color.alpha
 
+        // saveLayer на каждый highlighter дорог (отдельный слой), но без него полупрозрачный штрих
+        // темнел бы на самопересечениях: рисуем непрозрачным цветом в слой с alpha.
         drawIntoCanvas { canvas ->
             canvas.saveLayer(layerBounds, highlighterLayerPaint)
             try {
@@ -163,6 +174,8 @@ fun DrawScope.drawCachedGeometry(
             val baseAlpha = geom.color.alpha
             val androidPath = geom.path.asAndroidPath()
 
+            // Три прохода разной ширины и альфы вместо blur-фильтра: так получается мягкий край
+            // и плотный центр, оставаясь в рамках обычного drawPath.
             // 1. Широкий и полупрозрачный (создает мягкую тень/края)
             val p1 = getPencilPaint(color, geom.strokeWidth * 1.3f, baseAlpha * 0.4f)
             canvas.nativeCanvas.drawPath(androidPath, p1)

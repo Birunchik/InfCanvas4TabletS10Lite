@@ -34,6 +34,10 @@ import com.infinitecanvas.board.presentation.canvas.gestures.handleViewportPanZo
 import com.infinitecanvas.board.presentation.canvas.renderer.CanvasRenderState
 import kotlin.math.hypot
 
+/**
+ * Живёт в remember и не пересоздаётся между рекомпозициями, поэтому все зависимости —
+ * лямбды-провайдеры: они читают актуальные значения, не перезапуская pointerInput.
+ */
 class CanvasGestureHandler(
     private val renderState: CanvasRenderState,
     private val viewportState: () -> ViewportState,
@@ -65,6 +69,7 @@ class CanvasGestureHandler(
         onStateChanged = onStateChanged
     )
 
+    // State-списки, а не обычные: их мутирует жест, а Canvas читает размер в draw-фазе.
     val activePoints = mutableStateListOf<StrokePoint>()
     val lassoPoints = mutableStateListOf<StrokePoint>()
     var selectionDragDx by mutableDoubleStateOf(0.0)
@@ -84,6 +89,8 @@ class CanvasGestureHandler(
     }
 
     suspend fun AwaitPointerEventScope.detectCanvasGestures(pathCache: StrokeGeometryCache) {
+        // Приоритеты заданы порядком проверок: драг выделения → картинки → лассо → ластик/рисование.
+        // Перестановка ломает взаимодействие: лассо перехватит драг выделения, а обработчик картинок — тап по фото.
         while (true) {
             val firstDown = awaitFirstDown(requireUnconsumed = false)
             val isStylusOrEraser = firstDown.type == PointerType.Stylus || firstDown.type == PointerType.Eraser
@@ -95,6 +102,8 @@ class CanvasGestureHandler(
 
             val imageHit = imageHandler.evaluateHit(firstDown.position, worldDownX, worldDownY, vp)
 
+            // requireUnconsumed = false выше: down мог быть уже съеден interop-фильтром стилуса,
+            // но рисование всё равно должно начаться. Тач без права рисования уходит в пан/зум, down не consume'им.
             if (!isStylusOrEraser && !isSingleFingerAllowed && !imageHit.allowsTouchInteraction) {
                 handleViewportPanZoom(isZoomLocked, onTransform)
                 continue
@@ -104,6 +113,8 @@ class CanvasGestureHandler(
             val initialEvent = currentEvent
             firstDown.consume()
 
+            // Ластик включается тремя путями: тип пера, зажатая кнопка стилуса или вторичная кнопка.
+            // Вторичная кнопка не считается ластиком, если зажата кнопка лассо.
             val isForcedEraser = firstDown.type == PointerType.Eraser ||
                     stylusManager.isHardwareEraserHeld ||
                     (initialEvent.buttons.isSecondaryPressed && !stylusManager.isHardwareLassoHeld)
@@ -168,6 +179,8 @@ class CanvasGestureHandler(
         startWorldY: Double,
         pathCache: StrokeGeometryCache
     ) {
+        // selectionDragDx/Dy — накопленное world-смещение за жест. В модель оно уходит только
+        // на отпускании, а до тех пор Canvas рисует штрихи со сдвигом и расширяет query.
         var lastWorldX = startWorldX
         var lastWorldY = startWorldY
         selectionDragDx = 0.0
@@ -180,6 +193,8 @@ class CanvasGestureHandler(
 
             if (change == null || !change.pressed) {
                 change?.consume()
+                // Смещение применяем к кэшу ровно один раз, на отпускании: во время драга
+                // оно живёт только в draw-фазе, чтобы не трогать Path на каждом событии.
                 if (selectionDragDx != 0.0 || selectionDragDy != 0.0) {
                     pathCache.shiftCachedStrokes(selectedStrokeIds(), selectionDragDx, selectionDragDy)
                     onMoveSelectedStrokes(selectionDragDx, selectionDragDy)
@@ -222,6 +237,8 @@ class CanvasGestureHandler(
                     appendFilteredPoints(change, viewportState(), lassoPoints, minStepPx = 6.0, incrementalPath = lassoWorldPath)
                     change.consume()
                 }
+                // Selection считаем один раз на отпускании: LassoSelector обходит quadtree,
+                // и на каждом движении это было бы O(n) в кадре.
                 val foundIds = LassoSelector.findSelectedStrokeIds(lassoPoints, quadtree())
                 onStrokesSelected(foundIds)
                 lassoPoints.clear()
@@ -246,6 +263,8 @@ class CanvasGestureHandler(
         tappedUnselectedImage: BoardImage?,
         pathCache: StrokeGeometryCache
     ) {
+        // Один цикл на рисование и стирание: переключение кнопкой пера на лету не должно
+        // обрывать жест, поэтому isErasingNow — var, а не отдельная ветка сценария.
         var isErasingNow = isStylusOrEraser && (isForcedEraser || activeTool() == CanvasTool.ERASER)
 
         if (isErasingNow) {
@@ -298,6 +317,8 @@ class CanvasGestureHandler(
 
                 if ((isStylusOrEraser || isSingleFingerAllowed) && !isErasingNow && activePoints.isNotEmpty()) {
                     val committed = Stroke.create(System.nanoTime(), activePoints.toList(), activeBrush())
+                    // Прогреваем кэш до коммита: иначе первый кадр после коммита строил бы Path
+                    // в draw-фазе — заметный фриз на длинном штрихе.
                     pathCache.getOrBuild(committed)
                     onStrokeCommitted(committed)
                 }
@@ -306,6 +327,7 @@ class CanvasGestureHandler(
                 onStateChanged()
                 break
             } else {
+                // Порог 8 px отделяет тап от пана: без него микро-дрожание пальца превращало бы тап в панорамирование.
                 if (!movedBeyondTapThreshold && hypot(change.position.x - downScreenPos.x, change.position.y - downScreenPos.y) > 8f) {
                     movedBeyondTapThreshold = true
                 }

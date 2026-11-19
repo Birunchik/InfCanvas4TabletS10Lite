@@ -30,8 +30,12 @@ internal fun CanvasLayer(
     val selectionBounds by viewModel.selectionBounds.collectAsState()
     val quadtree by viewModel.quadtree.collectAsState()
 
+    // Bitmap — тяжёлый и не immutable объект, его нельзя класть в StateFlow, поэтому
+    // кэш лишь инкрементит тик: Canvas перерисуется, когда картинка догрузится.
     var imageLoadTick by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    // Ключ — imageAssetStorage: кэш не должен переживать смену хранилища, иначе
+    // отдавал бы bitmap удалённых или подменённых файлов.
     val imageCache = remember(imageAssetStorage) {
         BoardImageCache(
             imageAssetStorage = imageAssetStorage,
@@ -53,6 +57,8 @@ internal fun CanvasLayer(
         selectedStrokeIds = selectedStrokeIds,
         selectionBounds = selectionBounds,
         quadtree = quadtree,
+        // Палец не рисует: одиночный touch уходит в pan/zoom (если не попал в картинку),
+        // иначе ладонь оставляла бы штрихи при работе пером.
         allowFingerDrawing = false,
         onCanvasViewportSizeChanged = viewModel::updateCanvasViewportSize,
         onStrokeCommitted = viewModel::onStrokeCommitted,

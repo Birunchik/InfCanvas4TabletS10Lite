@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/**
+ * Состояние экрана собирается одним combine: порядок эмита предсказуем,
+ * а фильтр и поиск переживают пересоздание Activity.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val repository: BoardRepository
@@ -22,9 +26,11 @@ class HomeViewModel(
     private val _selectedFilter = MutableStateFlow<FolderFilter>(FolderFilter.All)
     private val _searchQuery = MutableStateFlow("")
 
+    // Одноразовое событие: SharedFlow, а не StateFlow, иначе повторная навигация при рекомпозиции
     private val _openBoardEvents = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     val openBoardEvents = _openBoardEvents.asSharedFlow()
 
+    // flatMapLatest отменяет прошлую подписку на БД: без него при смене фильтра копились бы живые коллекторы
     private val boardsFlow = _selectedFilter.flatMapLatest { filter ->
         when (filter) {
             FolderFilter.All -> repository.observeAllBoards()
@@ -33,12 +39,14 @@ class HomeViewModel(
         }
     }
 
+    // Четыре источника: любой (папки, фильтр, поиск) пересобирает состояние целиком, без промежуточных мутаций
     val uiState: StateFlow<HomeUiState> = combine(
         repository.observeFolders(),
         boardsFlow,
         _selectedFilter,
         _searchQuery
     ) { folders, boards, filter, query ->
+        // Папку могли удалить или переименовать извне: без сверки фильтр останется указывать на несуществующий id
         val syncedFilter = if (filter is FolderFilter.Custom) {
             val actualFolder = folders.find { it.id == filter.folderId }
             if (actualFolder != null) {
@@ -50,6 +58,7 @@ class HomeViewModel(
             filter
         }
 
+        // Поиск — подстрока без нормализации: «ё» не считается «е», замена регистра не спасает
         val filteredBoards = if (query.isBlank()) {
             boards
         } else {
@@ -82,6 +91,7 @@ class HomeViewModel(
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             val newId = repository.createFolder(trimmed)
+            // Сразу переключаем фильтр на новую папку, иначе пользователь не увидит, куда она создалась
             _selectedFilter.value = FolderFilter.Custom(newId, trimmed)
         }
     }
@@ -98,6 +108,7 @@ class HomeViewModel(
         viewModelScope.launch {
             repository.deleteFolder(folderId)
             val current = _selectedFilter.value
+            // Удалили активную папку — уходим на «Все», иначе останемся с фильтром на пустоту
             if (current is FolderFilter.Custom && current.folderId == folderId) {
                 _selectedFilter.value = FolderFilter.All
             }
@@ -108,6 +119,7 @@ class HomeViewModel(
         val targetFolderId = (_selectedFilter.value as? FolderFilter.Custom)?.folderId
         viewModelScope.launch {
             val boardId = repository.createBoard(title = defaultTitle, folderId = targetFolderId)
+            // tryEmit не приостанавливает корутину: буфер на 1, событие не должно блокировать создание доски
             _openBoardEvents.tryEmit(boardId)
         }
     }

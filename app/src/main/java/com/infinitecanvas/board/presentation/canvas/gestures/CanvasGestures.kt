@@ -14,6 +14,8 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import kotlin.math.hypot
 
+// minStepPx — в экранных px, переводим в мировые с лимитом 2.5: иначе на сильном
+// зуме фильтр съедал бы точки. incrementalPath достраивает штрих без пересборки.
 internal fun appendFilteredPoints(
     change: PointerInputChange,
     viewport: ViewportState,
@@ -25,6 +27,8 @@ internal fun appendFilteredPoints(
     val minDistWorld = (minStepPx / viewport.scale.coerceAtLeast(0.25)).coerceAtMost(2.5)
     val basePressure = change.pressure.coerceIn(0.05f, 1f)
 
+    // Сначала historical, затем текущая позиция: MotionEvent батчит промежуточные
+    // точки, без них быстрый штрих получается угловатым.
     for (historical in change.historical) {
         val wx = viewport.screenToWorldX(historical.position.x)
         val wy = viewport.screenToWorldY(historical.position.y)
@@ -62,6 +66,8 @@ private fun shouldAddPoint(
     return hypot(wx - last.x, wy - last.y) >= minDist
 }
 
+// Радиус ластика 18 px задан в экранных px и делится на scale: в world он растёт
+// при отдалении, поэтому на экране ластик ощущается одинаково.
 internal fun eraseAtScreenPosition(
     screenPos: Offset,
     viewport: ViewportState,
@@ -85,6 +91,8 @@ internal fun eraseAtScreenPosition(
     }
 }
 
+// Выходим, как только появился стилус: пан начался пальцем, но перо должно рисовать,
+// а не продолжать панорамирование. useCurrent=false — центроид не «прыгает».
 internal suspend fun AwaitPointerEventScope.handleViewportPanZoom(
     isZoomLocked: () -> Boolean,
     onTransform: (panX: Float, panY: Float, zoom: Float, centroidX: Float, centroidY: Float) -> Unit
@@ -103,7 +111,11 @@ internal suspend fun AwaitPointerEventScope.handleViewportPanZoom(
 
         if (centroid != Offset.Unspecified && (zoom != 1f || pan != Offset.Zero)) {
             onTransform(pan.x, pan.y, zoom, centroid.x, centroid.y)
+            // consume() обязателен: иначе родительские обработчики (например, скролл контейнера)
+            // обработают тот же жест повторно.
             event.changes.forEach { it.consume() }
         }
+    // Цикл до отпускания последнего пальца: добавление второго пальца меняет центроид,
+    // и жест продолжается как pinch без перезапуска детектора.
     } while (event.changes.any { it.pressed })
 }

@@ -10,6 +10,8 @@ data class StrokePoint(
     val timestampMs: Long = 0L
 )
 
+// AABB в мировых координатах. Инвариант min <= max не проверяется: его обязан
+// держать создатель, иначе quadtree и отрисовка молча потеряют объект.
 data class WorldBounds(
     val minX: Double,
     val minY: Double,
@@ -21,6 +23,8 @@ data class WorldBounds(
     val centerX: Double get() = (minX + maxX) * 0.5
     val centerY: Double get() = (minY + maxY) * 0.5
 
+    // Границы включительные (>=/<=): касание считается пересечением. Для индекса
+    // это безопасный перебор — лишние кандидаты отфильтрует точная проверка.
     fun intersects(left: Double, top: Double, right: Double, bottom: Double): Boolean {
         return maxX >= left && minX <= right && maxY >= top && minY <= bottom
     }
@@ -52,6 +56,8 @@ data class Stroke(
     val brush: Brush,
     val bounds: WorldBounds
 ) {
+    // Нулевой сдвиг возвращает this: перетаскивание без движения не должно
+    // плодить копии штриха и провоцировать перестройку quadtree.
     fun translated(dx: Double, dy: Double): Stroke {
         if (dx == 0.0 && dy == 0.0) return this
         val shiftedPoints = points.map { pt ->
@@ -69,7 +75,12 @@ data class Stroke(
     }
 
     companion object {
+        // bounds шире min/max точек на видимую толщину кисти, иначе ластик и
+        // выделение промахиваются по краю мазка; padding обязан покрывать ширину
+        // рендерера (highlighter — x6), а пустой points даст ±Infinity.
         fun create(id: Long, points: List<StrokePoint>, brush: Brush): Stroke {
+            // Множители повторяют визуальные ширины рендерера: при изменении
+            // calculateWidthForBrush их нужно синхронизировать, иначе AABB врёт.
             val visualWidth = when (brush.type) {
                 BrushType.HIGHLIGHTER -> brush.baseSize * 6.0
                 BrushType.FOUNTAIN -> brush.baseSize * 1.6

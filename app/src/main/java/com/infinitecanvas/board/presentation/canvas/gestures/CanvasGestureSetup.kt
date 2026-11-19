@@ -40,6 +40,8 @@ fun rememberCanvasGestureHandler(
     onUpdateImageBounds: (Long, WorldBounds) -> Unit,
     onTransform: (panX: Float, panY: Float, zoom: Float, centroidX: Float, centroidY: Float) -> Unit
 ): CanvasGestureHandler {
+    // Handler создаётся один раз (remember без ключей), поэтому все изменяемые входы
+    // читаются через rememberUpdatedState: замыкания видят актуальные состояние и колбэки.
     val currentViewport by rememberUpdatedState(viewportState)
     val currentTool by rememberUpdatedState(activeTool)
     val currentBrush by rememberUpdatedState(activeBrush)
@@ -52,6 +54,8 @@ fun rememberCanvasGestureHandler(
     val currentAllowFinger by rememberUpdatedState(allowFingerDrawing)
 
     val currentOnCommit by rememberUpdatedState(onStrokeCommitted)
+    // Обёртка чистит pathCache до вызова ViewModel: удалённый штрих не должен остаться
+    // в кеше геометрии, иначе он «мигнёт» при следующей перерисовке.
     val currentOnErase by rememberUpdatedState<(Set<Long>) -> Unit> { erasedIds ->
         renderState.pathCache.removeStrokes(erasedIds)
         onEraseStrokes(erasedIds)
@@ -111,6 +115,8 @@ fun Modifier.canvasGestures(
     }
     .pointerInput(Unit) {
         awaitEachGesture {
+            // pointerInput(Unit): перезапуск на каждый кадр убил бы текущий жест. Актуальность
+            // данных обеспечивает rememberUpdatedState выше, а не ключи модификатора.
             with(gestureHandler) { detectCanvasGestures(pathCache) }
         }
     }

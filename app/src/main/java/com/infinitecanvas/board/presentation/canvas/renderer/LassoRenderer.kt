@@ -15,6 +15,7 @@ fun DrawScope.drawLassoPreview(
     currentScaleFloat: Float,
     worldDashEffect: PathEffect
 ) {
+    // Path уже в world-координатах и достраивается в жесте: здесь его нельзя reset'ить или трансформировать.
     drawPath(
         path = lassoWorldPath,
         color = Color(0x1A1B6EF3)

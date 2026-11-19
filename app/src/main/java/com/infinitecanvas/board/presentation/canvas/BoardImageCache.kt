@@ -32,6 +32,7 @@ class BoardImageCache(
         }
     }
 
+    // Дедуп in-flight: getOrLoad зовётся каждый кадр, и без него на одно фото шли бы параллельные decode.
     private val inFlightKeys = Collections.synchronizedSet(HashSet<String>())
 
     /**
@@ -42,6 +43,8 @@ class BoardImageCache(
         val key = "$boardId/$fileName"
         cache.get(key)?.let { return it }
 
+        // null — нормальный контракт: decode идёт в IO, кадр не блокируется, перерисовку инициирует onImageLoaded.
+        // Минус: ошибка и отсутствие файла не кэшируются, поэтому такое фото передекодируется каждый кадр.
         if (inFlightKeys.add(key)) {
             scope.launch {
                 try {

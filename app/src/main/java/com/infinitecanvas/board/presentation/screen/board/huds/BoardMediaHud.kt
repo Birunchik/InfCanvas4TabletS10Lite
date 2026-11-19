@@ -45,6 +45,8 @@ internal fun BoardMediaHud(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    // URI нужно запомнить до запуска камеры: TakePicture возвращает только Boolean,
+    // и связать результат с temp-файлом можно лишь через это состояние.
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     // 1. Системный пикер галереи (не требует разрешений на Android 15)
@@ -67,6 +69,8 @@ internal fun BoardMediaHud(
         pendingCameraUri = null
     }
 
+    // Файл и FileProvider-URI создаются заранее; authority обязан совпадать с manifest
+    // ("$packageName.fileprovider"), иначе launch упадёт с IllegalArgumentException.
     val launchCameraWithTempFile: () -> Unit = {
         val tempFile = createTempCameraFile()
         val uri = FileProvider.getUriForFile(
@@ -80,6 +84,8 @@ internal fun BoardMediaHud(
 
     // 3. Запрос runtime-разрешения CAMERA при необходимости
     val permissionDeniedMsg = stringResource(R.string.camera_permission_denied)
+    // CAMERA спрашиваем лениво, только по кнопке камеры: галерея идёт через
+    // системный PickVisualMedia, который runtime-разрешений не требует.
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->

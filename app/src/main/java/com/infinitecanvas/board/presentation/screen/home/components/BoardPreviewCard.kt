@@ -60,6 +60,7 @@ internal fun BoardPreviewCard(
     var menuExpanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // remember по updatedAt: пересобираем форматтер только при смене даты, а не на каждый рекомпоз
     val formattedDate = remember(board.updatedAt) {
         SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(board.updatedAt))
     }
@@ -88,6 +89,7 @@ internal fun BoardPreviewCard(
                 }
 
                 if (thumbFile != null) {
+                    // Ключ кэша включает updatedAt: без него Coil отдаст старую миниатюру после перерисовки доски
                     val imageRequest = remember(thumbFile, board.updatedAt) {
                         ImageRequest.Builder(context)
                             .data(thumbFile)
@@ -158,6 +160,7 @@ internal fun BoardPreviewCard(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.action_rename)) },
                             onClick = {
+                                // Сбрасываем флаг до колбэка: иначе меню висит поверх открывшегося диалога
                                 menuExpanded = false
                                 onRequestRename()
                             }
@@ -195,6 +198,7 @@ private fun EmptyBoardGridPlaceholder() {
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
+            // Линии считаем от фактического size: готовая фоновая картинка тянулась бы при смене числа колонок
             val step = 28.dp.toPx()
             val lineColor = Color(0xFFE5E8ED)
             var x = step

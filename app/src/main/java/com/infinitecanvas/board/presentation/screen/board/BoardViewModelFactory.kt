@@ -12,6 +12,8 @@ class BoardViewModelFactory(
     private val imageAssetStorage: ImageAssetStorage
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
+    // isAssignableFrom — чтобы фабрика работала и для подклассов BoardViewModel;
+    // неизвестная модель — исключение, а не молчаливый null из фабрики.
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(BoardViewModel::class.java)) {
             return BoardViewModel(

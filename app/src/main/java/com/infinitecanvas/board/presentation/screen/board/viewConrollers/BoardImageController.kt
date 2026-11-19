@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.min
 
+// Инвариант: bounds pinned-картинок — в screen-координатах, остальных — в world.
+// Любая работа с bounds обязана сначала смотреть на isPinned.
 class BoardImageController(
     private val imageAssetStorage: ImageAssetStorage,
     private val scope: CoroutineScope,
@@ -42,6 +44,8 @@ class BoardImageController(
         selId != null && list.firstOrNull { it.id == selId }?.isPinned == true
     }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), false)
 
+    // Клампим сразу после загрузки: pinned-bounds сохранены под прежний размер экрана
+    // и после поворота/смены устройства могут оказаться за пределами viewport.
     fun setInitialImages(images: List<BoardImage>) {
         _images.value = images
         _selectedImageId.value = null
@@ -51,12 +55,16 @@ class BoardImageController(
         )
     }
 
+    // Сначала вписываем размер в allowedW/H, затем прижимаем только minX/minY к
+    // [0, max-w]: размер уже вписан, поэтому maxX/maxY выводятся из него. margin = 16 px.
     fun clampPinnedImagesToViewport(widthPx: Int, heightPx: Int) {
         if (widthPx <= 0 || heightPx <= 0) return
         val maxW = widthPx.toDouble()
         val maxH = heightPx.toDouble()
         val margin = 16.0
 
+        // changed защищает от лишнего onContentChanged на каждом layout-проходе: иначе
+        // поворот экрана помечал бы доску изменённой и запускал автосейв без правок.
         var changed = false
         _images.update { list ->
             list.map { img ->
@@ -95,6 +103,8 @@ class BoardImageController(
 
     fun createTempCameraFile(): File = imageAssetStorage.createTempCameraFile()
 
+    // Центр — середина viewport в world, ширина — 45 % экрана, но не больше исходника;
+    // делим на scale, чтобы вставка не зависела от текущего зума.
     fun insertImageFromUri(boardId: Long, uri: Uri) {
         if (boardId <= 0L) return
         scope.launch {
@@ -144,6 +154,8 @@ class BoardImageController(
         _selectedImageId.value = null
     }
 
+    // Пин: world→screen (закрепляем к экрану), отпин: screen→world. Bounds меняют
+    // систему координат, поэтому после конвертации обязателен clamp к viewport.
     fun togglePinSelectedImage() {
         val targetId = _selectedImageId.value ?: return
         val vp = viewportController.viewportState.value
@@ -184,6 +196,8 @@ class BoardImageController(
         onContentChanged()
     }
 
+    // Сначала убираем из StateFlow и снимаем выделение, файл удаляем асинхронно:
+    // UI не ждёт IO, а fileName взят из target до удаления.
     fun deleteSelectedImage(boardId: Long) {
         val targetId = _selectedImageId.value ?: return
         val target = _images.value.firstOrNull { it.id == targetId } ?: return

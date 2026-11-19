@@ -13,6 +13,8 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import com.infinitecanvas.board.domain.model.CanvasTool
 
+// isHardwareEraserHeld/isHardwareLassoHeld — состояние удержания кнопки, а не
+// переключатели: сбрасываются при отпускании и не «залипают».
 internal class StylusButtonManager(
     private val activeTool: () -> CanvasTool,
     private val onStateChanged: () -> Unit
@@ -26,6 +28,8 @@ internal class StylusButtonManager(
     private var wasStylusButtonPressed = false
     private var lastButtonPressTimeMs by mutableLongStateOf(0L)
 
+    // Повторное нажатие кнопки в пределах 400 мс = лассо, одиночное = ластик.
+    // Всегда возвращаем false: событие должно дойти до Compose-pointerInput.
     fun handlePointerInterop(motionEvent: MotionEvent): Boolean {
         val state = motionEvent.buttonState
         val pressed = (state and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0 ||
@@ -49,6 +53,8 @@ internal class StylusButtonManager(
         return false
     }
 
+    // Hover приходит для стилуса без касания: превью ластика показываем при зажатой
+    // кнопке или активном ластике, но подавляем в режиме лассо.
     suspend fun AwaitPointerEventScope.observeHover() {
         while (true) {
             val event = awaitPointerEvent()

@@ -56,6 +56,7 @@ internal fun FolderSidebarContent(
 ) {
     Column(
         modifier = modifier
+            // Ширина фиксирована: растянутая панель на планшете отъедает место у грида досок
             .width(272.dp)
             .fillMaxHeight()
             .padding(horizontal = 12.dp, vertical = 16.dp)
@@ -106,9 +107,11 @@ internal fun FolderSidebarContent(
         ) {
             items(
                 items = folders,
+                // key = id: без него при удалении папки Compose переиспользует открытое меню соседней строки
                 key = { it.id },
                 contentType = { "folder_item" }
             ) { folder ->
+                // Сравниваем по id, а не по объекту Custom: при переименовании фильтр пересоздаётся с новым именем
                 val isSelected = selectedFilter is FolderFilter.Custom &&
                         selectedFilter.folderId == folder.id
                 var menuOpen by remember { mutableStateOf(false) }

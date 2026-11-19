@@ -37,6 +37,7 @@ fun AppNavHost(
                 viewModel = homeViewModel,
                 onOpenBoard = { boardId ->
                     navController.navigate("board/$boardId") {
+                        // launchSingleTop гасит двойной тап по карточке: иначе в бэкстеке две одинаковые доски
                         launchSingleTop = true
                     }
                 }
@@ -47,6 +48,7 @@ fun AppNavHost(
             route = "board/{boardId}",
             arguments = listOf(navArgument("boardId") { type = NavType.LongType })
         ) { backStackEntry ->
+            // Тип аргумента объявлен LongType выше: без явного типа Navigation отдал бы строку и getLong вернул бы 0
             val boardId = backStackEntry.arguments?.getLong("boardId") ?: return@composable
             val boardViewModel: BoardViewModel = viewModel(
                 factory = BoardViewModelFactory(

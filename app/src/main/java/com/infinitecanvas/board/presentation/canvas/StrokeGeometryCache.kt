@@ -15,6 +15,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
+// 1500 записей — компромисс: при сильном зуме в кадр попадают тысячи штрихов,
+// и маленький LRU заставлял бы перестраивать Path прямо в draw-фазе.
 private const val MAX_GEOMETRY_CACHE_ENTRIES = 1500
 private const val MAX_POOLED_BUFFER_CAPACITY = 2048
 
@@ -36,6 +38,8 @@ class CachedStrokeGeometry(
     val brushType: BrushType? = null
 )
 
+// Скрэтч-массивы на поток: построение геометрии иначе аллоцировало бы 8 FloatArray на штрих,
+// а это прямые GC-паузы при массовом кэш-миссе во время кадра.
 internal class GeometryScratchBuffers {
     var xs1 = FloatArray(256)
     var ys1 = FloatArray(256)
@@ -48,6 +52,7 @@ internal class GeometryScratchBuffers {
     var backwardWidths = FloatArray(256)
 
     fun ensureCapacity(required: Int) {
+        // Растим все массивы вместе: они индексируются одним i, и разная длина дала бы выход за границу.
         if (xs1.size < required) {
             val newCap = max(required, xs1.size * 2)
             xs1 = FloatArray(newCap)
@@ -62,6 +67,7 @@ internal class GeometryScratchBuffers {
     }
 
     fun trimIfOversized() {
+        // Сбрасываем разросшиеся буферы: иначе один гигантский штрих навсегда оставил бы их память в ThreadLocal.
         if (xs1.size > MAX_POOLED_BUFFER_CAPACITY) {
             xs1 = FloatArray(256)
             ys1 = FloatArray(256)
@@ -75,8 +81,14 @@ internal class GeometryScratchBuffers {
     }
 }
 
+// ThreadLocal, а не поле класса: буферы переиспользуются без блокировок и не делятся между экземплярами кэша.
 private val threadLocalScratchBuffers = ThreadLocal.withInitial { GeometryScratchBuffers() }
 
+/**
+ * Кэш геометрии по id штриха. Валидность проверяется по bounds, а не по id:
+ * bounds меняются при драге и undo, и запись с несовпавшими bounds обязана пересобраться,
+ * иначе на экране остался бы старый путь.
+ */
 class StrokeGeometryCache {
     private val cache = object : LinkedHashMap<Long, CachedStrokeGeometry>(256, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedStrokeGeometry>?): Boolean {
@@ -104,6 +116,8 @@ class StrokeGeometryCache {
 
     fun shiftCachedStrokes(ids: Set<Long>, dx: Double, dy: Double) {
         if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
+        // Мутируем Path in-place: translate дешевле пересборки, но смещение применяется ровно один раз
+        // за коммит — повторный вызов с тем же dx сдвинет путь ещё раз.
         val offset = Offset(dx.toFloat(), dy.toFloat())
 
         for (id in ids) {
@@ -155,6 +169,8 @@ class StrokeGeometryCache {
     )
 }
 
+// Путь не создаём внутри: активный штрих переиспользует renderState.activePath,
+// поэтому функция обязана начинать с reset и целиком перезаписывать targetPath.
 fun buildGeometry(
     stroke: Stroke,
     targetPath: Path
@@ -163,6 +179,7 @@ fun buildGeometry(
     val brush = stroke.brush
     val baseColor = Color(brush.colorArgb)
     val isHighlighter = brush.type == BrushType.HIGHLIGHTER
+    // Альфу highlighters зажимаем в 0.35–0.45: при полной альфе перекрытия выглядели бы как плотный маркер.
     val effectiveAlpha = if (isHighlighter) {
         brush.opacity.coerceIn(0.35f, 0.45f)
     } else {
@@ -171,6 +188,8 @@ fun buildGeometry(
     val strokeColor = baseColor.copy(alpha = effectiveAlpha)
 
     val effectiveWidth = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 0f)
+    // Bounds highlighters расширяем на 0.85 ширины: chisel-трансформ растягивает путь по Y,
+    // и по исходным bounds отсечение обрезало бы концы штриха.
     val effectiveBounds = if (isHighlighter) {
         val extraPad = (effectiveWidth * 0.85)
         WorldBounds(
@@ -284,6 +303,8 @@ fun buildGeometry(
     }
 }
 
+// Два прохода box-фильтра 1-2-1: первый — в xs2, второй возвращает результат в xs1.
+// Края не сглаживаем, иначе штрих «уезжал» бы с точки касания.
 private fun smoothCoordinatesIntoScratch(
     raw: List<StrokePoint>,
     n: Int,
@@ -316,6 +337,8 @@ private fun smoothCoordinatesIntoScratch(
     }
 }
 
+// Несмотря на имя, путь собирается lineTo: точки уже сглажены предыдущим проходом,
+// и кривые Безье здесь только увеличили бы стоимость растеризации на длинных штрихах.
 private fun buildSmoothQuadraticPathFromArrays(
     xs: FloatArray,
     ys: FloatArray,
@@ -413,6 +436,9 @@ private fun createSmoothSegmentFromArrays(
     )
 }
 
+// Скорость берём по скользящему окну ~45 мс, а не по последнему сегменту:
+// timestamp'ы дрожат, и мгновенная скорость давала бы рваную ширину.
+// Два прохода (вперёд/назад) с лимитом шага на пиксель убирают асимметрию на быстрых росчерках.
 private fun computeSmoothedWidthsInScratch(
     rawPoints: List<StrokePoint>,
     xs: FloatArray,
@@ -492,6 +518,9 @@ private fun computeSmoothedWidthsInScratch(
     return backward
 }
 
+// Нормаль считаем по (next - prev), а не по одному сегменту: иначе на изломах
+// outline самопересекается и даёт «шипы». Здесь же аллокации на каждый вызов —
+// поэтому FOUNTAIN дорог и не должен пересобираться каждый кадр.
 private fun buildVariableWidthOutlinePath(
     points: List<StrokePoint>,
     widths: FloatArray,
@@ -544,6 +573,7 @@ private fun buildVariableWidthOutlinePath(
     outPath.close()
 }
 
+// Ширина возвращается в world px: при рендере её умножает масштаб трансформа, поэтому zoom здесь не учитывается.
 fun calculateWidthForBrush(
     brush: Brush,
     pressure: Float,

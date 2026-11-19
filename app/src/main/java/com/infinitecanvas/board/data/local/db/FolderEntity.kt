@@ -6,6 +6,8 @@ import androidx.room.PrimaryKey
 import com.infinitecanvas.board.domain.model.Folder
 
 @Entity(tableName = "folders")
+// created_at не меняется при rename: он tie-breaker сортировки папок
+// (ORDER BY sort_order, created_at), поэтому трогать его нельзя.
 data class FolderEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,

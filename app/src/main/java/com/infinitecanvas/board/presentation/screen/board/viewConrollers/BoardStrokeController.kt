@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
+// Штрихи — PersistentList: pushUndoSnapshot кладёт ссылку на старую версию, а не
+// копию, поэтому undo дешёвый и не может испортить текущий список.
 class BoardStrokeController(
     scope: CoroutineScope,
     private val onContentChanged: () -> Unit,
@@ -46,6 +48,8 @@ class BoardStrokeController(
 
     private var pasteCascadeCount = 0
 
+    // История не переживает загрузку: undo вернул бы штрихи прошлой доски. Выделение
+    // тоже сбрасывается — id из старого документа невалидны.
     fun setInitialStrokes(strokes: List<Stroke>) {
         undoStack.clear()
         _canUndo.value = false
@@ -115,6 +119,8 @@ class BoardStrokeController(
         _selectionBounds.value = null
     }
 
+    // Сначала remove старых id, потом insert перемещённых: insert по существующему id
+    // оставил бы в quadtree orphan-узел со старыми bounds.
     fun moveSelectedStrokes(dx: Double, dy: Double) {
         val ids = _selectedStrokeIds.value
         if (ids.isEmpty() || (dx == 0.0 && dy == 0.0)) return
@@ -157,6 +163,8 @@ class BoardStrokeController(
         }
     }
 
+    // id = nanoTime + index: нужна глобальная уникальность, иначе повторная вставка
+    // дала бы дубликаты. pasteCascadeCount даёт каскадный сдвиг по 28 px.
     fun pasteClipboardStrokes() {
         val clipboard = _clipboardStrokes.value
         if (clipboard.isEmpty()) return
@@ -183,6 +191,8 @@ class BoardStrokeController(
         onContentChanged()
     }
 
+    // Undo возвращает immutable-снапшот и пересобирает quadtree целиком: in-place
+    // удаления не откатить. Выделение сбрасывается — этих id в снапшоте может не быть.
     fun undo() {
         if (undoStack.isEmpty()) return
         val previous = undoStack.removeLast()
@@ -195,6 +205,8 @@ class BoardStrokeController(
         onContentChanged()
     }
 
+    // Лимит 40 ограничивает память, а не число шагов: снапшоты структурно делят узлы
+    // с текущим списком, поэтому мелкая правка стоит дёшево.
     private fun pushUndoSnapshot(snapshot: PersistentList<Stroke>) {
         if (undoStack.size >= 40) {
             undoStack.removeFirst()

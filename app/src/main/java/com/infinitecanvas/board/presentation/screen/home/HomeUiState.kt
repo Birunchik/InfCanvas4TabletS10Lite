@@ -9,6 +9,7 @@ import com.infinitecanvas.board.domain.model.Folder
 sealed interface FolderFilter {
     data object All : FolderFilter
     data object Unassigned : FolderFilter
+    // folderName денормализован намеренно: снимок имени не ломает заголовок, даже если папку уже удалили
     data class Custom(val folderId: Long, val folderName: String) : FolderFilter
 }
 

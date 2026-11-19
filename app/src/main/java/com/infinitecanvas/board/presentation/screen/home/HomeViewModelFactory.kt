@@ -7,6 +7,7 @@ import com.infinitecanvas.board.domain.repository.BoardRepository
 class HomeViewModelFactory(
     private val repository: BoardRepository
 ) : ViewModelProvider.Factory {
+    // Фабрика нужна из-за конструктора с репозиторием: без неё viewModel() не создаст HomeViewModel рефлексией
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {

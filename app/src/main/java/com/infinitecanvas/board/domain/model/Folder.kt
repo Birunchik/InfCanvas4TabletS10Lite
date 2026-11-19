@@ -1,5 +1,7 @@
 package com.infinitecanvas.board.domain.model
 
+// createdAt задаётся при создании и дальше не пересчитывается: от него зависит
+// порядок папок при равном sortOrder.
 data class Folder(
     val id: Long,
     val name: String,

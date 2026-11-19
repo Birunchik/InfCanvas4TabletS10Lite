@@ -65,12 +65,14 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    // collect один раз на жизнь ViewModel: событие разовое, при рекомпозиции повторной подписки не будет
     LaunchedEffect(viewModel) {
         viewModel.openBoardEvents.collect { boardId ->
             onOpenBoard(boardId)
         }
     }
 
+    // Диалоги — локальный remember, а не ViewModel: не переживают поворот намеренно, зато нет «залипших» флагов
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var folderToRename by remember { mutableStateOf<Folder?>(null) }
     var boardToRename by remember { mutableStateOf<BoardSummary?>(null) }
@@ -82,6 +84,7 @@ fun HomeScreen(
 
     // Адаптивный выбор: на 10.9" планшете постоянная панель слева; в узком split-screen — выдвижная шторка
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 600.dp — брейкпоинт Material: ниже постоянная панель оставляет гриду меньше двух колонок
         val usePermanentDrawer = maxWidth >= 600.dp
 
         if (usePermanentDrawer) {
@@ -282,6 +285,7 @@ private fun BoardsGridPane(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
+                    // Номер берём по видимому списку, а не по всей БД: имена после фильтрации могут повторяться
                     val nextNumber = state.boards.size + 1
                     onCreateBoard("$defaultBoardPrefix $nextNumber")
                 },
@@ -326,9 +330,11 @@ private fun BoardsGridPane(
             ) {
                 items(
                     items = state.boards,
+                    // key = id обязателен: иначе при удалении или фильтрации Compose переиспользует состояние чужих карточек
                     key = { it.id },
                     contentType = { "board_card" }
                 ) { board ->
+                    // Метку папки показываем только в «Все доски»: внутри папки она дублировала бы заголовок
                     val folderLabel = if (state.selectedFilter is FolderFilter.All) {
                         board.folderId?.let { folderNamesById[it] }
                     } else {

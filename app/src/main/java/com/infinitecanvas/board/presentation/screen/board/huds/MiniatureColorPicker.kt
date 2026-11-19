@@ -50,6 +50,8 @@ fun MiniatureColorPickerContent(
     onPinColor: (Int) -> Unit,
     onDeleteColor: () -> Unit
 ) {
+    // initialColorInt — только стартовое значение: hsv ниже живут в отдельных
+    // mutableFloatStateOf и намеренно не синхронизируются с внешним цветом.
     val initialHsv = remember {
         FloatArray(3).apply { AndroidColor.colorToHSV(initialColorInt, this) }
     }
@@ -58,6 +60,8 @@ fun MiniatureColorPickerContent(
     var saturation by remember { mutableFloatStateOf(initialHsv[1]) }
     var value by remember { mutableFloatStateOf(initialHsv[2]) }
 
+    // Буфер переиспользуется, чтобы не аллоцировать FloatArray на каждый кадр drag;
+    // remember(hue, saturation, value) пересчитывает ARGB только при их изменении.
     val hsvBuffer = remember { FloatArray(3) }
     val currentInt = remember(hue, saturation, value) {
         hsvBuffer[0] = hue
@@ -78,6 +82,8 @@ fun MiniatureColorPickerContent(
         )
     }
 
+    // Градиенты зависят от текущих компонент: шкала насыщенности — от hue/value,
+    // шкала яркости — от hue/saturation, иначе ползунки показывали бы чужой цвет.
     val saturationGradientColors = remember(hue, value) {
         listOf(
             Color(AndroidColor.HSVToColor(floatArrayOf(hue, 0f, value))),
@@ -183,6 +189,8 @@ fun MiniatureColorPickerContent(
 }
 
 @Composable
+// valueRange: hue — градусы 0..360, saturation/value — 0..1 (диапазоны HSVToColor).
+// Два pointerInput: tap и drag независимы и не перехватывают друг друга.
 private fun HsvGradientSlider(
     label: String,
     value: Float,
@@ -241,6 +249,8 @@ private fun HsvGradientSlider(
             )
 
             val thumbRadius = 10.dp.toPx()
+            // Бегунок ходит в пределах [radius, width-radius], чтобы кружок не вылезал
+            // за скруглённый трек на краях.
             val thumbX = thumbRadius + fraction * (size.width - thumbRadius * 2f)
             val thumbCenter = Offset(thumbX, size.height * 0.5f)
 

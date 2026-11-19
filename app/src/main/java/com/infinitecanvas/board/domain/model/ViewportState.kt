@@ -2,6 +2,8 @@ package com.infinitecanvas.board.domain.model
 
 import kotlin.math.max
 import kotlin.math.min
+// offset — экранные px, scale — безразмерный. Прямое преобразование:
+// screen = world * scale + offset; обратное сначала вычитает offset, потом делит.
 data class ViewportState(
     val offsetX: Double = 0.0,
     val offsetY: Double = 0.0,

@@ -32,6 +32,8 @@ internal class ImageHitResult(
                 selectedImg != null
 }
 
+// previewImageBounds — кадровое состояние drag/resize: в ViewModel bounds уходят
+// только по отпусканию, чтобы не гонять autosave на каждый кадр.
 internal class ImageGestureHandler(
     private val viewportState: () -> ViewportState,
     private val images: () -> List<BoardImage>,
@@ -45,6 +47,8 @@ internal class ImageGestureHandler(
     var previewImageBounds by mutableStateOf<WorldBounds?>(null)
         private set
 
+    // Приоритет: угол выделенной → её тело → pinned → unpinned. Pinned проверяется
+    // в screen-координатах, unpinned — в world; vp даёт обе системы.
     fun evaluateHit(
         screenPos: Offset,
         worldX: Double,
@@ -63,6 +67,8 @@ internal class ImageGestureHandler(
             screenX in sb.minX..sb.maxX && screenY in sb.minY..sb.maxY
         } ?: false
 
+        // lastOrNull, а не firstOrNull: список идёт в порядке отрисовки, и касание должно
+        // доставаться верхней картинке, а не первой по id.
         val hitPinned = allImages.lastOrNull { img ->
             img.isPinned && screenX in img.bounds.minX..img.bounds.maxX && screenY in img.bounds.minY..img.bounds.maxY
         }
@@ -83,6 +89,9 @@ internal class ImageGestureHandler(
     /**
      * Пытается перехватить жест для взаимодействия с выделенной или закреплённой картинкой.
      * Возвращает true, если жест полностью обработан.
+     *
+     * Стилус и forced eraser картинку не перетаскивают: ими рисуют/стирают, поэтому
+     * для них выделение только сбрасывается. Ресайз — лишь для touch.
      */
     suspend fun AwaitPointerEventScope.tryHandleImmediateGesture(
         firstDown: PointerInputChange,
@@ -99,6 +108,8 @@ internal class ImageGestureHandler(
 
         val selectedImg = hit.selectedImg
         if (selectedImg != null) {
+            // Угол важнее тела: иначе попадание в угол внутри bounds начинало бы drag,
+            // и ресайз был бы недоступен у маленьких картинок.
             if (!isStylusOrEraser && !isForcedEraser && !isLassoMode && hit.hitCornerOnSelected != null) {
                 handleImageResize(pointerId, selectedImg, hit.hitCornerOnSelected)
                 return true
@@ -123,6 +134,8 @@ internal class ImageGestureHandler(
 
         return false
     }
+    // Порог 28 px — в экранных px, не в world: угловые маркеры рисуются фиксированного
+    // размера, поэтому хит-зона не должна расти вместе с зумом.
     private fun detectResizeCorner(screenPos: Offset, screenBounds: WorldBounds): ImageResizeCorner? {
         val hitRadiusPx = 28f
         val px = screenPos.x
@@ -140,6 +153,8 @@ internal class ImageGestureHandler(
             else -> null
         }
     }
+    // Для pinned дельта считается в screen, для остальных — в world: bounds pinned
+    // уже в screen-координатах, смешивать системы нельзя.
     private suspend fun AwaitPointerEventScope.handleImageDrag(
         pointerId: PointerId,
         image: BoardImage,
@@ -185,6 +200,8 @@ internal class ImageGestureHandler(
         }
     }
 
+    // aspectRatio фиксируется на старте: ширина ведёт, высота выводится из неё,
+    // иначе при смене угла картинка меняла бы пропорции.
     private suspend fun AwaitPointerEventScope.handleImageResize(
         pointerId: PointerId,
         image: BoardImage,
@@ -192,6 +209,8 @@ internal class ImageGestureHandler(
     ) {
         val orig = image.bounds
         val aspectRatio = ((orig.maxX - orig.minX) / (orig.maxY - orig.minY).coerceAtLeast(1.0)).coerceAtLeast(0.1)
+        // Минимумы в разных системах: 80 screen px для pinned и 48 world для остальных —
+        // ниже этого углы налезают друг на друга, и попадание становится неоднозначным.
         val minSize = if (image.isPinned) 80.0 else 48.0
 
         var currentBounds = orig

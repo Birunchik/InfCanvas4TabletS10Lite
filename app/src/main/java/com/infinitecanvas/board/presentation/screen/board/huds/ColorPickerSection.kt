@@ -40,6 +40,8 @@ internal fun ColorPickerSection(
     onUpdatePresetColor: (Int, Int) -> Unit,
     onPinColor: (Int) -> Unit
 ) {
+    // selectedPresetIndex — это ещё и режим редактирования: клик по уже выбранному
+    // цвету открывает палитру, и правки пишутся в пресет, а не в кисть.
     var menuExpanded by remember { mutableStateOf(false) }
 
     Box {
@@ -61,6 +63,8 @@ internal fun ColorPickerSection(
                                 Modifier
                             }
                         )
+                        // Двойной клик удаляет цвет (если пресетов >1), одиночный по выбранному открывает
+                        // редактор — поэтому удаление не повешено на долгое нажатие.
                         .combinedClickable(
                             onClick = {
                                 if (isSelected) {
@@ -113,6 +117,8 @@ internal fun ColorPickerSection(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
+            // Пиннить можно только новый цвет, удалять — только существующий и не последний;
+            // кнопки именно неактивны, а не скрыты, чтобы меню не меняло высоту.
             val canPin = selectedPresetIndex == null
             val canDelete = selectedPresetIndex != null && presetColors.size > 1
 

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Porno</string>
+    <string name="app_name">InfCanPRN</string>
 
     <string name="brush_ballpoint">Ручка</string>
     <string name="brush_fountain">Перо</string>
@@ -44,14 +44,25 @@
     <string name="search_boards_hint">Поиск досок…</string>
     <string name="default_board_title">Доска</string>
     <string name="board_empty_preview">Пустой холст</string>
-    <string name="empty_boards_title">В этой папке пока нет досок</string>
+
+    <string name="empty_boards_title">У вас пока нет досок</string>
     <string name="empty_boards_subtitle">Нажмите «Новая доска», чтобы начать рисовать</string>
+    <string name="empty_folder_title">В этой папке пока нет досок</string>
+    <string name="empty_search_title">Ничего не найдено</string>
+    <string name="empty_search_subtitle">Попробуйте изменить запрос</string>
+
     <string name="dialog_new_folder_title">Создать папку</string>
     <string name="dialog_rename_folder_title">Переименовать папку</string>
     <string name="dialog_rename_board_title">Переименовать доску</string>
+    <string name="dialog_delete_board_title">Удалить доску?</string>
+    <string name="dialog_delete_board_message">«%1$s» будет удалена без возможности восстановления.</string>
+    <string name="dialog_delete_folder_title">Удалить папку?</string>
+    <string name="dialog_delete_folder_message">«%1$s» будет удалена. Доски внутри переместятся в «%2$s».</string>
 
     <string name="action_insert_from_gallery">Фото из хранилища</string>
     <string name="action_take_photo">Сделать фотографию</string>
     <string name="action_delete_image">Удалить изображение</string>
     <string name="camera_permission_denied">Для съёмки фото требуется разрешение на камеру</string>
+
+    <string name="error_operation_failed">Не удалось выполнить операцию</string>
 </resources>

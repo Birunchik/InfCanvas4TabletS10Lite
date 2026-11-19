@@ -11,6 +11,7 @@ import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
+import com.infinitecanvas.board.domain.model.sortedForDisplay
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -26,7 +27,9 @@ class BoardRepositoryImpl(
     // Flow из Room эмитит на любое изменение таблицы; маппинг в домен дешёвый,
     // но выполняется на каждом эмите — не добавлять сюда чтение файлов.
     override fun observeFolders(): Flow<List<Folder>> =
-        dao.observeFolders().map { list -> list.map { it.toDomain() } }
+        dao.observeFolders().map { list ->
+            list.map { it.toDomain() }.sortedForDisplay()
+        }
 
     override fun observeAllBoards(): Flow<List<BoardSummary>> =
         dao.observeAllBoards().map { list -> list.map { it.toDomain() } }
@@ -68,6 +71,15 @@ class BoardRepositoryImpl(
         )
         fileStorage.writeBoardPayload(id, emptyList(), emptyList(), ViewportState())
         return id
+    }
+    override suspend fun getSuggestedBoardTitle(prefix: String): String {
+        val titles = dao.getAllBoardTitles()
+        // Точное совпадение "$prefix N": "Доска 12" парсится, "Доска 12 (копия)" — нет
+        val pattern = Regex("^${Regex.escape(prefix)} (\\d+)$")
+        val maxNumber = titles
+            .mapNotNull { pattern.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+            .maxOrNull() ?: 0
+        return "$prefix ${maxNumber + 1}"
     }
 
     // Сначала метаданные: нет строки — доска удалена, файл можно не читать.

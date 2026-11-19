@@ -1,5 +1,6 @@
 package com.infinitecanvas.board.domain.model
 
+
 // Лёгкая проекция для списков: геометрии здесь нет, она читается только в
 // loadBoard — список досок не должен тянуть бинарные файлы.
 data class BoardSummary(

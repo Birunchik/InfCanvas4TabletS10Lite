@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.board.viewConrollers
+package com.infinitecanvas.board.presentation.screen.board.viewControllers
 
 import android.net.Uri
 import android.util.Log

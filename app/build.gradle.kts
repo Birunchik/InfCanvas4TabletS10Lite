@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.google.devtools.ksp)
 }
 
+composeCompiler {
+    stabilityConfigurationFiles.add {(file("stability_config.conf"))}
+}
+
 android {
     namespace = "com.infinitecanvas.board"
     compileSdk {
@@ -70,6 +74,9 @@ dependencies {
 
     // Тестирование
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.arch.core.testing)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -1,14 +1,17 @@
 package com.infinitecanvas.board.presentation.screen.home.components
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -33,8 +36,7 @@ internal fun TextInputDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    // remember без ключей: поле инициализируется один раз, иначе ввод сбрасывался бы на каждой рекомпозиции
-    var text by remember { mutableStateOf(initialValue) }
+    var text by remember(initialValue) { mutableStateOf(initialValue) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -71,20 +73,37 @@ internal fun MoveToFolderDialog(
     onDismiss: () -> Unit,
     onSelectFolder: (Long?) -> Unit
 ) {
-    // null — это «Без папки», поэтому тип nullable, а стартуем с текущей папки доски
-    var selectedId by remember { mutableStateOf(currentFolderId) }
+    // remember(currentFolderId): если диалог когда-нибудь начнут переиспользовать
+    // для другой доски без пересоздания, выбор не «унаследуется» от предыдущей.
+    var selectedId by remember(currentFolderId) { mutableStateOf(currentFolderId) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.action_move_to_folder)) },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                FolderRadioRow(
-                    label = stringResource(R.string.folder_unassigned),
-                    selected = selectedId == null,
-                    onClick = { selectedId = null }
-                )
-                folders.forEach { folder ->
+            // heightIn обязателен: LazyColumn требует ограниченной высоты,
+            // иначе ловит IllegalStateException на бесконечных constraints.
+            // 320dp — компромисс: на телефоне помещается в диалог без переполнения,
+            // на планшете всё ещё достаточно места для ~6-7 видимых строк.
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+            ) {
+                // "Без папки" — фиксированный первый элемент, не из списка
+                item(key = "unassigned") {
+                    FolderRadioRow(
+                        label = stringResource(R.string.folder_unassigned),
+                        selected = selectedId == null,
+                        onClick = { selectedId = null }
+                    )
+                }
+                // state.folders уже отсортирован репозиторием (Шаг 3.3),
+                // повторная сортировка здесь была бы дублированием.
+                items(
+                    items = folders,
+                    key = { it.id }
+                ) { folder ->
                     FolderRadioRow(
                         label = folder.name,
                         selected = selectedId == folder.id,
@@ -124,4 +143,32 @@ private fun FolderRadioRow(
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = label)
     }
+}
+
+@Composable
+internal fun DeleteConfirmationDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.action_delete),
+                    // Красный — единственный визуальный маркер, что действие разрушительное
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
 }

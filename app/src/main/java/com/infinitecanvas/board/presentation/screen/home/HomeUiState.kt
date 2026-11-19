@@ -1,5 +1,6 @@
 package com.infinitecanvas.board.presentation.screen.home
 
+import androidx.compose.runtime.Immutable
 import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 
@@ -13,6 +14,7 @@ sealed interface FolderFilter {
     data class Custom(val folderId: Long, val folderName: String) : FolderFilter
 }
 
+@Immutable
 data class HomeUiState(
     val folders: List<Folder> = emptyList(),
     val boards: List<BoardSummary> = emptyList(),

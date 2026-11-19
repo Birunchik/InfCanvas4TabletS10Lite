@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.board.viewConrollers
+package com.infinitecanvas.board.presentation.screen.board.viewControllers
 
 import com.infinitecanvas.board.domain.model.ViewportState
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -24,9 +24,9 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.CachedStrokeGeometry
 import androidx.core.graphics.createBitmap
+import com.infinitecanvas.board.domain.model.BrushDefaults.HIGHLIGHTER_CHISEL_ANGLE_DEG
 
-const val HIGHLIGHTER_WIDTH_MULTIPLIER = 6.0f
-const val HIGHLIGHTER_CHISEL_ANGLE_DEG = -30f
+
 
 // Общий Paint для saveLayer: его alpha мутируется перед каждым highlighter'ом,
 // поэтому опираться на это поле между вызовами нельзя.

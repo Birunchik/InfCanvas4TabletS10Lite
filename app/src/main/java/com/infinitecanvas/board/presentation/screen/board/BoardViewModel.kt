@@ -10,10 +10,10 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.domain.repository.BoardRepository
-import com.infinitecanvas.board.presentation.screen.board.viewConrollers.BoardImageController
-import com.infinitecanvas.board.presentation.screen.board.viewConrollers.BoardStrokeController
-import com.infinitecanvas.board.presentation.screen.board.viewConrollers.BoardToolController
-import com.infinitecanvas.board.presentation.screen.board.viewConrollers.BoardViewportController
+import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardImageController
+import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardStrokeController
+import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardToolController
+import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardViewportController
 import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable

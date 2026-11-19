@@ -71,4 +71,7 @@ interface BoardDao {
 
     @Query("DELETE FROM boards WHERE id = :boardId")
     suspend fun deleteBoard(boardId: Long)
+
+    @Query("SELECT title FROM boards")
+    suspend fun getAllBoardTitles(): List<String>
 }

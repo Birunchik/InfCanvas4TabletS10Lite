@@ -3,7 +3,7 @@ package com.infinitecanvas.board.domain.spatial
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
-import com.infinitecanvas.board.presentation.canvas.renderer.HIGHLIGHTER_WIDTH_MULTIPLIER
+import com.infinitecanvas.board.domain.model.BrushDefaults.HIGHLIGHTER_WIDTH_MULTIPLIER
 import kotlin.math.sqrt
 
 /**

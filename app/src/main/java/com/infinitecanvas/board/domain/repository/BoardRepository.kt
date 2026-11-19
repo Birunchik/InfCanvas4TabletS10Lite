@@ -37,4 +37,6 @@ interface BoardRepository {
     suspend fun renameBoard(boardId: Long, newTitle: String)
     suspend fun moveBoardToFolder(boardId: Long, targetFolderId: Long?)
     suspend fun deleteBoard(boardId: Long)
+
+    suspend fun getSuggestedBoardTitle(prefix: String): String
 }

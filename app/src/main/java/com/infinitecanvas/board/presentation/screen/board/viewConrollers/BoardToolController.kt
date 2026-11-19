@@ -41,7 +41,11 @@ class BoardToolController(
     fun selectBrushType(type: BrushType) {
         _activeTool.value = CanvasTool.BRUSH
         _activeBrush.update { current ->
-            val targetOpacity = if (type == BrushType.HIGHLIGHTER) 0.4f else 1f
+            val targetOpacity = when (type) {
+                BrushType.HIGHLIGHTER -> 0.4f
+                BrushType.PENCIL -> 0.9f     // Карандаш чуть прозрачный
+                else -> 1.0f
+            }
             current.copy(
                 type = type,
                 opacity = targetOpacity

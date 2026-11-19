@@ -1,9 +1,11 @@
 package com.infinitecanvas.board.domain.model
 
 enum class BrushType {
-    BALLPOINT,
-    FOUNTAIN,
-    HIGHLIGHTER
+    BALLPOINT,     // Ручка
+    FOUNTAIN,      // Перо
+    PENCIL,        // Карандаш
+    MARKER,        // Маркер
+    HIGHLIGHTER    // Выделитель
 }
 
 data class Brush(

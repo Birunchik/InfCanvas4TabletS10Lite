@@ -3,7 +3,10 @@
 
     <string name="brush_ballpoint">Ручка</string>
     <string name="brush_fountain">Перо</string>
-    <string name="brush_highlighter">Маркер</string>
+    <string name="brush_highlighter">Выделитель</string>
+    <string name="brush_pencil">Карандаш</string>
+    <string name="brush_marker">Маркер</string>
+
     <string name="tool_eraser">Ластик</string>
     <string name="tool_lasso">Лассо</string>
 

@@ -3,14 +3,6 @@ package com.infinitecanvas.board.domain.model
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Отдельная точка штриха в мировых координатах доски.
- *
- * @property x Мировая координата X.
- * @property y Мировая координата Y.
- * @property pressure Нормализованная сила нажатия стилуса (0.0f..1.0f).
- * @property timestampMs Время фиксации точки в миллисекундах для расчёта скорости пера.
- */
 data class StrokePoint(
     val x: Double,
     val y: Double,
@@ -81,6 +73,8 @@ data class Stroke(
             val visualWidth = when (brush.type) {
                 BrushType.HIGHLIGHTER -> brush.baseSize * 6.0
                 BrushType.FOUNTAIN -> brush.baseSize * 1.6
+                BrushType.PENCIL -> brush.baseSize * 1.2
+                BrushType.MARKER -> brush.baseSize * 1.2
                 BrushType.BALLPOINT -> brush.baseSize * 1.05
             }
             val padding = (visualWidth * 0.65).coerceAtLeast(4.0)

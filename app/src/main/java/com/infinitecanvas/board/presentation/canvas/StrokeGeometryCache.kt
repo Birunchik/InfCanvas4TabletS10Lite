@@ -32,13 +32,10 @@ class CachedStrokeGeometry(
     val strokeWidth: Float = 0f,
     val singleDotCenter: Offset? = null,
     val singleDotRadius: Float = 0f,
-    val variableSegments: List<VariableStrokeSegment> = emptyList()
+    val variableSegments: List<VariableStrokeSegment> = emptyList(),
+    val brushType: BrushType? = null
 )
 
-/**
- * Потокобезопасный пул временных примитивных массивов для математических расчётов
- * сглаживания и квантования, исключающий аллокации при рендеринге на 90 Гц.
- */
 internal class GeometryScratchBuffers {
     var xs1 = FloatArray(256)
     var ys1 = FloatArray(256)
@@ -81,7 +78,6 @@ internal class GeometryScratchBuffers {
 private val threadLocalScratchBuffers = ThreadLocal.withInitial { GeometryScratchBuffers() }
 
 class StrokeGeometryCache {
-    // LRU-кэш (accessOrder = true): плавно вытесняет наиболее давно использованные штрихи
     private val cache = object : LinkedHashMap<Long, CachedStrokeGeometry>(256, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedStrokeGeometry>?): Boolean {
             return size > MAX_GEOMETRY_CACHE_ENTRIES
@@ -145,7 +141,8 @@ class StrokeGeometryCache {
                 strokeWidth = existing.strokeWidth,
                 singleDotCenter = shiftedDot,
                 singleDotRadius = existing.singleDotRadius,
-                variableSegments = shiftedSegments
+                variableSegments = shiftedSegments,
+                brushType = existing.brushType
             )
         }
     }
@@ -200,7 +197,8 @@ fun buildGeometry(
                 path = targetPath,
                 color = strokeColor,
                 isHighlighter = true,
-                strokeWidth = effectiveWidth
+                strokeWidth = effectiveWidth,
+                brushType = brush.type
             )
         }
         return CachedStrokeGeometry(
@@ -209,7 +207,8 @@ fun buildGeometry(
             color = strokeColor,
             isHighlighter = false,
             singleDotCenter = Offset(p.x.toFloat(), p.y.toFloat()),
-            singleDotRadius = calculateWidthForBrush(brush, p.pressure, speedPxPerMs = 0f) * 0.5f
+            singleDotRadius = calculateWidthForBrush(brush, p.pressure, speedPxPerMs = 0f) * 0.5f,
+            brushType = brush.type
         )
     }
 
@@ -230,11 +229,12 @@ fun buildGeometry(
                     path = targetPath,
                     color = strokeColor,
                     isHighlighter = true,
-                    strokeWidth = effectiveWidth
+                    strokeWidth = effectiveWidth,
+                    brushType = brush.type
                 )
             }
 
-            BrushType.BALLPOINT -> {
+            BrushType.BALLPOINT, BrushType.MARKER -> {
                 buildSmoothQuadraticPathFromArrays(sx, sy, n, targetPath)
                 var pressureSum = 0f
                 for (i in 0 until n) {
@@ -246,19 +246,36 @@ fun buildGeometry(
                     path = targetPath,
                     color = strokeColor,
                     isHighlighter = false,
-                    strokeWidth = width
+                    strokeWidth = width,
+                    brushType = brush.type
+                )
+            }
+
+            BrushType.PENCIL -> {
+                // Просто строим обычный гладкий путь. Никакого джиттера.
+                buildSmoothQuadraticPathFromArrays(sx, sy, n, targetPath)
+                CachedStrokeGeometry(
+                    bounds = effectiveBounds,
+                    path = targetPath,
+                    color = strokeColor,
+                    isHighlighter = false,
+                    strokeWidth = effectiveWidth, // Оставляем стандартную ширину
+                    brushType = brush.type
                 )
             }
 
             BrushType.FOUNTAIN -> {
-                val segments = buildQuantizedFountainSegments(rawPoints, sx, sy, n, brush, scratch)
+                val widths = computeSmoothedWidthsInScratch(rawPoints, sx, sy, n, brush, scratch)
+                buildVariableWidthOutlinePath(rawPoints, widths, targetPath)
+
                 CachedStrokeGeometry(
                     bounds = effectiveBounds,
                     path = targetPath,
                     color = strokeColor,
                     isHighlighter = false,
                     strokeWidth = 0f,
-                    variableSegments = segments
+                    variableSegments = emptyList(), // Отключаем кусочки
+                    brushType = brush.type
                 )
             }
         }
@@ -475,6 +492,58 @@ private fun computeSmoothedWidthsInScratch(
     return backward
 }
 
+private fun buildVariableWidthOutlinePath(
+    points: List<StrokePoint>,
+    widths: FloatArray,
+    outPath: Path
+) {
+    val n = points.size
+    if (n < 2) return
+
+    val halfWidths = FloatArray(n) { widths[it] * 0.5f }
+    val leftX = FloatArray(n)
+    val leftY = FloatArray(n)
+    val rightX = FloatArray(n)
+    val rightY = FloatArray(n)
+
+    // Вычисляем векторы нормалей и смещаем точки
+    for (i in 0 until n) {
+        val curr = points[i]
+        val prev = if (i > 0) points[i - 1] else curr
+        val next = if (i < n - 1) points[i + 1] else curr
+
+        var dx = (next.x - prev.x).toFloat()
+        var dy = (next.y - prev.y).toFloat()
+        val len = sqrt(dx * dx + dy * dy)
+        if (len > 1e-4f) { dx /= len; dy /= len } else { dx = 1f; dy = 0f }
+
+        val hw = halfWidths[i]
+        leftX[i] = curr.x.toFloat() - dy * hw
+        leftY[i] = curr.y.toFloat() + dx * hw
+        rightX[i] = curr.x.toFloat() + dy * hw
+        rightY[i] = curr.y.toFloat() - dx * hw
+    }
+
+    // Левая сторона (плавные кривые)
+    outPath.moveTo(leftX[0], leftY[0])
+    for (i in 1 until n) {
+        val midX = (leftX[i - 1] + leftX[i]) * 0.5f
+        val midY = (leftY[i - 1] + leftY[i]) * 0.5f
+        outPath.quadraticTo(leftX[i - 1], leftY[i - 1], midX, midY)
+    }
+    outPath.lineTo(leftX[n - 1], leftY[n - 1])
+
+    // Правая сторона (в обратном порядке, плавные кривые)
+    outPath.lineTo(rightX[n - 1], rightY[n - 1])
+    for (i in n - 1 downTo 1) {
+        val midX = (rightX[i] + rightX[i - 1]) * 0.5f
+        val midY = (rightY[i] + rightY[i - 1]) * 0.5f
+        outPath.quadraticTo(rightX[i], rightY[i], midX, midY)
+    }
+    outPath.lineTo(rightX[0], rightY[0])
+    outPath.close()
+}
+
 fun calculateWidthForBrush(
     brush: Brush,
     pressure: Float,
@@ -484,6 +553,14 @@ fun calculateWidthForBrush(
     return when (brush.type) {
         BrushType.BALLPOINT -> {
             brush.baseSize * (0.95f + p * 0.10f)
+        }
+
+        BrushType.PENCIL -> {
+            brush.baseSize * (0.85f + p * 0.15f)
+        }
+
+        BrushType.MARKER -> {
+            brush.baseSize * (0.98f + p * 0.05f)
         }
 
         BrushType.FOUNTAIN -> {
@@ -499,4 +576,4 @@ fun calculateWidthForBrush(
     }.coerceAtLeast(0.5f)
 }
 
-private inline fun hypotFast(dx: Float, dy: Float): Float = sqrt(dx * dx + dy * dy)
+private fun hypotFast(dx: Float, dy: Float): Float = sqrt(dx * dx + dy * dy)

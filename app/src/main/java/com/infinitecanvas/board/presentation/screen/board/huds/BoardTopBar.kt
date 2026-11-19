@@ -155,6 +155,8 @@ private fun BrushSelector(
         listOf(
             BrushType.BALLPOINT to R.string.brush_ballpoint,
             BrushType.FOUNTAIN to R.string.brush_fountain,
+            //BrushType.PENCIL to R.string.brush_pencil,       // <--- ДОБАВЛЕНО
+            BrushType.MARKER to R.string.brush_marker,       // <--- ДОБАВЛЕНО
             BrushType.HIGHLIGHTER to R.string.brush_highlighter
         ).forEach { (type, labelRes) ->
             FilterChip(

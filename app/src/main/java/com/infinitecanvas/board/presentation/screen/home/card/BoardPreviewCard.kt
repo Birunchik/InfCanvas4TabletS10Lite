@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.home.components
+package com.infinitecanvas.board.presentation.screen.home.card
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable

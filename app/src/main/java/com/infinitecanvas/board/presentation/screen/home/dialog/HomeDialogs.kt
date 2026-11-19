@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.home.components
+package com.infinitecanvas.board.presentation.screen.home.dialog
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row

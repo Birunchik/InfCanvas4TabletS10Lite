@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.home.components
+package com.infinitecanvas.board.presentation.screen.home.sidebar
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding

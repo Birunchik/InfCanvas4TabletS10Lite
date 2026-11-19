@@ -41,7 +41,7 @@
     <string name="action_save">Сохранить</string>
     <string name="action_clear_search">Очистить поиск</string>
     <string name="action_back_to_boards">К списку досок</string>
-    <string name="search_boards_hint">Поиск досок…</string>
+    <string name="search_boards_hint">Поиск</string>
     <string name="default_board_title">Доска</string>
     <string name="board_empty_preview">Пустой холст</string>
 

@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.screen.home.components
+package com.infinitecanvas.board.presentation.screen.home.pane
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box

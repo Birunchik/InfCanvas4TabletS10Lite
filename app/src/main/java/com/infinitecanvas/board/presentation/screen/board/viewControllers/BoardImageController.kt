@@ -196,9 +196,15 @@ class BoardImageController(
         onContentChanged()
     }
 
+    // boardId guard симметричен insertImageFromUri: без него прямой вызов
+    // deleteSelectedImage(0) удалил бы файл по пути board0/<fileName>,
+    // а картинку из _images убрал бы — «удалили, но не то». Инвариант
+    // «контроллер валиден только с положительным boardId» держим здесь,
+    // а не только в BoardViewModel.
     // Сначала убираем из StateFlow и снимаем выделение, файл удаляем асинхронно:
     // UI не ждёт IO, а fileName взят из target до удаления.
     fun deleteSelectedImage(boardId: Long) {
+        if (boardId <= 0L) return
         val targetId = _selectedImageId.value ?: return
         val target = _images.value.firstOrNull { it.id == targetId } ?: return
 

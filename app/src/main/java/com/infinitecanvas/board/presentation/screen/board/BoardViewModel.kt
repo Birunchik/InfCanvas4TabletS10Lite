@@ -42,9 +42,17 @@ class BoardViewModel(
     private var autoSaveJob: Job? = null
     private var hasUnsavedChanges: Boolean = false
 
-    private val _boardTitle = MutableStateFlow("")
+    // Guard от повторного openBoard той же доски: пока идёт загрузка,
+    // currentBoardId ещё не выставлен, и без этого флага LaunchedEffect(boardId)
+    // мог бы запустить загрузку дважды. Это не UI-флаг — подписчиков нет.
+    private val _isBoardLoadInProgress = MutableStateFlow(true)
 
-    private val _isLoading = MutableStateFlow(true)
+    // Флаг «выход уже начат»: защищает от двойного flushSaveAndThumbnail
+    // (повторный back, back + кнопка в топбаре). Вызовы идут только с main-потока
+    // (BackHandler, onClick, onCleared), поэтому обычный var достаточен —
+    // check-and-set не пересекается между потоками. После back экран и VM
+    // уничтожаются, сбрасывать флаг не нужно.
+    private var isExiting: Boolean = false
 
     private val viewportController = BoardViewportController(
         onViewportChanged = { scheduleAutoSave(regenerateThumbnail = false) }
@@ -103,19 +111,18 @@ class BoardViewModel(
     // Повторное открытие уже загруженной доски — no-op: setInitial* сбросил бы
     // undo-стек и выделение, хотя пользователь просто вернулся на тот же boardId.
     fun openBoard(boardId: Long) {
-        if (currentBoardId == boardId && !_isLoading.value) return
+        if (currentBoardId == boardId && !_isBoardLoadInProgress.value) return
         viewModelScope.launch {
-            _isLoading.value = true
+            _isBoardLoadInProgress.value = true
             val doc = repository.loadBoard(boardId)
             if (doc != null) {
                 currentBoardId = boardId
-                _boardTitle.value = doc.summary.title
                 strokeController.setInitialStrokes(doc.strokes)
                 imageController.setInitialImages(doc.images)
                 viewportController.setViewport(doc.viewport)
                 hasUnsavedChanges = false
             }
-            _isLoading.value = false
+            _isBoardLoadInProgress.value = false
         }
     }
 
@@ -126,6 +133,15 @@ class BoardViewModel(
             onFinished?.invoke()
             return
         }
+        // Повторный back: сохранять второй раз не нужно — первый flush уже
+        // пишет в NonCancellable и допишет сам. Навигацию завершаем сразу,
+        // чтобы повторный back не висел в ожидании генерации миниатюры.
+        if (isExiting) {
+            onFinished?.invoke()
+            return
+        }
+        isExiting = true
+
         // Отменяем отложенный автосейв: иначе после flush сработает ещё одна запись
         // той же доски, и порядок «кто последний» станет неопределённым.
         autoSaveJob?.cancel()

@@ -48,6 +48,17 @@ class BoardStrokeController(
 
     private var pasteCascadeCount = 0
 
+    // Инвариант: _selectionBounds = computeSelectionWorldBounds(_strokes, _selectedStrokeIds).
+    // Единственная точка записи bounds из IDs; moveSelectedStrokes сознательно
+    // не использует хелпер — там арифметика +dx/+dy дешевле полного пересчёта
+    // и корректна, пока bounds согласованы (а они согласованы, потому что все
+    // остальные мутаторы идут через этот хелпер).
+    private fun recomputeSelectionBounds() {
+        val ids = _selectedStrokeIds.value
+        _selectionBounds.value = if (ids.isEmpty()) null
+        else computeSelectionWorldBounds(_strokes.value, ids)
+    }
+
     // История не переживает загрузку: undo вернул бы штрихи прошлой доски. Выделение
     // тоже сбрасывается — id из старого документа невалидны.
     fun setInitialStrokes(strokes: List<Stroke>) {
@@ -80,10 +91,8 @@ class BoardStrokeController(
 
         val selected = _selectedStrokeIds.value
         if (selected.isNotEmpty() && selected.any { it in idsToRemove }) {
-            val remaining = selected - idsToRemove
-            _selectedStrokeIds.value = remaining
-            _selectionBounds.value = if (remaining.isEmpty()) null
-            else computeSelectionWorldBounds(filtered, remaining)
+            _selectedStrokeIds.value = selected - idsToRemove
+            recomputeSelectionBounds()
         }
 
         onContentChanged()
@@ -91,8 +100,7 @@ class BoardStrokeController(
 
     fun selectStrokes(ids: Set<Long>) {
         _selectedStrokeIds.value = ids
-        _selectionBounds.value = if (ids.isEmpty()) null
-        else computeSelectionWorldBounds(_strokes.value, ids)
+        recomputeSelectionBounds()
 
         if (ids.isNotEmpty()) {
             onSelectionActivated()
@@ -141,6 +149,9 @@ class BoardStrokeController(
         ids.forEach { _quadtree.value.remove(it) }
         movedStrokes.forEach { _quadtree.value.insert(it) }
 
+        // Арифметика вместо recomputeSelectionBounds(): полный пересчёт на каждом
+        // drag-кадре — O(N), а сдвиг bounds на +dx/+dy — O(1). Корректно, потому
+        // что bounds согласованы с выделением (инвариант выше).
         _selectionBounds.value?.let { b ->
             _selectionBounds.value = WorldBounds(
                 minX = b.minX + dx,
@@ -186,7 +197,7 @@ class BoardStrokeController(
 
         val newIds = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
         _selectedStrokeIds.value = newIds
-        _selectionBounds.value = computeSelectionWorldBounds(_strokes.value, newIds)
+        recomputeSelectionBounds()
         onSelectionActivated()
         onContentChanged()
     }

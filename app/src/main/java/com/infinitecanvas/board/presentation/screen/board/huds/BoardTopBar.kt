@@ -191,7 +191,7 @@ private fun BrushSizeSlider(
         Slider(
             value = currentSize.coerceIn(2f, 36f),
             onValueChange = onSizeChanged,
-            valueRange = 2f..36f,
+            valueRange = 2f..24f,
             // steps=16 даёт 18 позиций с шагом 2 px (34/17) — та же сетка, что у снапа
             // в ViewModel, иначе значение «прыгало» бы между позициями.
             steps = 16,

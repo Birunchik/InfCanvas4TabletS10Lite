@@ -3,6 +3,8 @@ package com.infinitecanvas.board.presentation.screen.home
 import android.annotation.SuppressLint
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -19,9 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.infinitecanvas.board.R
 import com.infinitecanvas.board.presentation.screen.home.pane.BoardsGridPane
 import com.infinitecanvas.board.presentation.screen.home.dialog.DeleteConfirmationDialog
@@ -30,7 +33,6 @@ import com.infinitecanvas.board.presentation.screen.home.dialog.MoveToFolderDial
 import com.infinitecanvas.board.presentation.screen.home.dialog.TextInputDialog
 import kotlinx.coroutines.launch
 
-@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -66,10 +68,16 @@ fun HomeScreen(
     val folderNamesById = remember(state.folders) {
         state.folders.associate { it.id to it.name }
     }
-    val usePermanentDrawer = rememberUsePermanentDrawer()
 
-    // Адаптивный выбор: на 10.9" планшете постоянная панель слева;
-    // в узком split-screen — выдвижная шторка.
+    // Ширина берётся из constraints самого контейнера, а не из
+    // Configuration.screenWidthDp: в multi-window / freeform / split-screen
+    // полная ширина экрана не совпадает с доступной. Поэтому @SuppressLint
+    // на ConfigurationScreenWidthHeight больше не нужен ни здесь, ни наверху.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 600dp — брейкпоинт Material: ниже постоянная панель оставила бы
+        // гриду меньше двух колонок.
+        val usePermanentDrawer = maxWidth >= 600.dp
+
         if (usePermanentDrawer) {
             PermanentNavigationDrawer(
                 drawerContent = {
@@ -140,6 +148,7 @@ fun HomeScreen(
                 )
             }
         }
+    }
 
     // Один when вместо шести if/let: исчерпывающая проверка компилятором,
     // невозможно забыть обработать новое состояние HomeDialogState.
@@ -213,6 +222,7 @@ fun HomeScreen(
         )
     }
 }
+
 /**
  * Обёртка над Context.getString для вызова из LaunchedEffect: messageResId
  * известен только в runtime (Flow-событие), поэтому stringResource не подходит —
@@ -227,9 +237,3 @@ fun HomeScreen(
 @SuppressLint("LocalContextGetResourceValueCall")
 private fun Context.getStringRes(@StringRes resId: Int): String = getString(resId)
 
-@SuppressLint("ConfigurationScreenWidthHeight")
-@Composable
-private fun rememberUsePermanentDrawer(): Boolean {
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    return screenWidthDp >= 600
-}

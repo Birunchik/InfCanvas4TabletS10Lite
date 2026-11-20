@@ -96,7 +96,6 @@ internal fun BoardsGridPane(
                 EmptyBoardsContent(
                     searchQuery = state.searchQuery,
                     filter = state.selectedFilter,
-                    contentPadding = PaddingValues(0.dp)
                 )
             } else {
                 BoardsGrid(
@@ -124,26 +123,20 @@ internal fun BoardsGridPane(
 @Composable
 private fun EmptyBoardsContent(
     searchQuery: String,
-    filter: FolderFilter,
-    contentPadding: PaddingValues
+    filter: FolderFilter
 ) {
     when {
         searchQuery.isNotBlank() -> EmptyState(
             titleRes = R.string.empty_search_title,
-            subtitleRes = R.string.empty_search_subtitle,
-            modifier = Modifier.padding(contentPadding)
+            subtitleRes = R.string.empty_search_subtitle
         )
-
         filter is FolderFilter.Custom -> EmptyState(
             titleRes = R.string.empty_folder_title,
-            subtitleRes = R.string.empty_boards_subtitle,
-            modifier = Modifier.padding(contentPadding)
+            subtitleRes = R.string.empty_boards_subtitle
         )
-
         else -> EmptyState(
             titleRes = R.string.empty_boards_title,
-            subtitleRes = R.string.empty_boards_subtitle,
-            modifier = Modifier.padding(contentPadding)
+            subtitleRes = R.string.empty_boards_subtitle
         )
     }
 }

@@ -5,13 +5,15 @@ plugins {
 }
 
 composeCompiler {
-    stabilityConfigurationFiles.add {(file("stability_config.conf"))}
+    stabilityConfigurationFiles.add { file("stability_config.conf") }
 }
 
 android {
     namespace = "com.infinitecanvas.board"
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 1
+        }
     }
 
     defaultConfig {
@@ -20,7 +22,6 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +39,16 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+
+    // ── Фаза 0: testOptions ──
+    testOptions {
+        // Robolectric: Android-ресурсы и классы (Path/Bitmap) доступны в src/test
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+        // Убирает часть флаки в instrumented (анимации кнопок/навигации)
+        animationsDisabled = true
     }
 }
 
@@ -72,14 +83,18 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.room.compiler)
 
-    // Тестирование
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.androidx.arch.core.testing)
+    //unit test ──
+    testImplementation(libs.bundles.unitTest)
+    testImplementation(libs.androidx.arch.core.testing) // уже был — оставляем
+
+    //instrumented test ──
+    androidTestImplementation(libs.bundles.androidTest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.junit.ktx)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

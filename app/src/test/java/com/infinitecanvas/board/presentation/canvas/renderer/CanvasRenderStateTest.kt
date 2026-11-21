@@ -95,6 +95,25 @@ class CanvasRenderStateTest {
 
         assertNotSame("После смены scale старый объект не восстанавливается", original, backToOne)
     }
+    class ComputeWorldDashIntervalsTest {
+        @Test fun `scale 1 returns base pattern`() {
+            val r = computeWorldDashIntervals(1f)
+            assertEquals(14f, r[0], 1e-6f)
+            assertEquals(10f, r[1], 1e-6f)
+        }
+        @Test fun `scale 2 divides both by scale`() {
+            val r = computeWorldDashIntervals(2f)
+            assertEquals(7f, r[0], 1e-6f)
+            assertEquals(5f, r[1], 1e-6f)
+        }
+        @Test fun `large scale keeps proportions`() {
+            val r = computeWorldDashIntervals(10f)
+            assertEquals(14f / 10f, r[0], 1e-6f)
+            assertEquals(10f / 10f, r[1], 1e-6f)
+            assertEquals(14f / 10f / (10f / 10f), r[0] / r[1], 1e-5f)
+        }
+    }
+
 
     @After
     fun tearDown() {

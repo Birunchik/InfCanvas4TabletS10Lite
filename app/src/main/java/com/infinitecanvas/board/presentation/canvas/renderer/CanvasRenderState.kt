@@ -39,14 +39,13 @@ class CanvasRenderState {
     fun worldDashEffect(currentScale: Float): PathEffect {
         val cached = worldDashCache
         if (cached != null && dashScale == currentScale) return cached
+        dashScale = currentScale
         // Делим длины на масштаб: PathEffect задаётся в world-единицах, и без этого пунктир
         // на экране растягивался бы вместе с зумом.
-        dashScale = currentScale
-        return PathEffect.dashPathEffect(
-            floatArrayOf(14f / currentScale, 10f / currentScale),
-            0f
-        ).also { worldDashCache = it }
+        return PathEffect.dashPathEffect(computeWorldDashIntervals(currentScale), 0f)
+            .also { worldDashCache = it }
     }
+
 
     // Счётчик, читаемый внутри Canvas для принудительной перерисовки
     // при мутации gesture handler.
@@ -61,3 +60,5 @@ class CanvasRenderState {
 @Composable
 fun rememberCanvasRenderState(): CanvasRenderState =
     remember { CanvasRenderState() }
+internal fun computeWorldDashIntervals(scale: Float): FloatArray =
+    floatArrayOf(14f / scale, 10f / scale)

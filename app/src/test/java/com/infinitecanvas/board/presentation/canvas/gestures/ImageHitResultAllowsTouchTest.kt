@@ -17,7 +17,7 @@ import org.junit.Test
 class ImageHitResultAllowsTouchTest {
 
     private val img: BoardImage = BoardImageFixtures.image(
-        id = 1L, isPinned = false, bounds = WorldBounds(0.0, 0.0, 100.0, 100.0)
+        id = 1L, isPinned = false, bounds = WorldBounds(0.0, 0.0, 100.0, 100.0),
     )
 
     @Test
@@ -27,7 +27,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = null,
             hitSelectedImgBody = false,
             hitPinnedImg = null,
-            hitUnpinnedImg = null
+            hitUnpinnedImg = null,
         )
         assertFalse(r.allowsTouchInteraction)
     }
@@ -39,7 +39,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = null,
             hitSelectedImgBody = false,
             hitPinnedImg = null,
-            hitUnpinnedImg = null
+            hitUnpinnedImg = null,
         )
         assertTrue(r.allowsTouchInteraction)
     }
@@ -51,7 +51,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = ImageResizeCorner.TOP_LEFT,
             hitSelectedImgBody = false,
             hitPinnedImg = null,
-            hitUnpinnedImg = null
+            hitUnpinnedImg = null,
         )
         assertTrue(r.allowsTouchInteraction)
     }
@@ -63,7 +63,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = null,
             hitSelectedImgBody = true,
             hitPinnedImg = null,
-            hitUnpinnedImg = null
+            hitUnpinnedImg = null,
         )
         assertTrue(r.allowsTouchInteraction)
     }
@@ -75,7 +75,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = null,
             hitSelectedImgBody = false,
             hitPinnedImg = img,
-            hitUnpinnedImg = null
+            hitUnpinnedImg = null,
         )
         assertTrue(r.allowsTouchInteraction)
     }
@@ -87,7 +87,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = null,
             hitSelectedImgBody = false,
             hitPinnedImg = null,
-            hitUnpinnedImg = img
+            hitUnpinnedImg = img,
         )
         assertTrue(r.allowsTouchInteraction)
     }
@@ -99,7 +99,7 @@ class ImageHitResultAllowsTouchTest {
             hitCornerOnSelected = ImageResizeCorner.BOTTOM_RIGHT,
             hitSelectedImgBody = true,
             hitPinnedImg = img,
-            hitUnpinnedImg = img
+            hitUnpinnedImg = img,
         )
         assertTrue(r.allowsTouchInteraction)
     }

@@ -2,7 +2,7 @@ package com.infinitecanvas.board.presentation.screen.home
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import com.infinitecanvas.board.R
@@ -27,20 +27,20 @@ class HomeScreenTest {
         title = title,
         updatedAt = 0L,
         thumbnailPath = null,
-        strokesCount = 0
+        strokesCount = 0,
     )
 
-    private fun folder(id: Long, name: String) = Folder(
+    private fun folder(id: Long = 7L, name: String = "Work") = Folder(
         id = id,
         name = name,
         sortOrder = 0,
-        createdAt = 0L
+        createdAt = 0L,
     )
 
     private fun setHomeScreen(vm: HomeViewModel) {
         composeRule.setContent {
             InfCanvasTheme {
-                HomeScreen(viewModel = vm, onOpenBoard = {})
+                HomeScreen(viewModel = vm) {}
             }
         }
         // StateFlow-цепочка (combine + stateIn) эмитит асинхронно на Main.
@@ -50,7 +50,7 @@ class HomeScreenTest {
 
     @Test
     fun emptyState_noBoardsAtAll_showsAllBoardsTitle() {
-        val repo = HomeScreenFakeRepository().apply{
+        val repo = HomeScreenFakeRepository().apply {
             foldersFlow.value = emptyList()
             allBoardsFlow.value = emptyList()
         }
@@ -65,7 +65,7 @@ class HomeScreenTest {
     @Test
     fun emptyState_emptyCustomFolder_showsFolderTitle() {
         val repo = HomeScreenFakeRepository().apply {
-            foldersFlow.value = listOf(folder(7, "Work"))
+            foldersFlow.value = listOf(folder())
             // boardsByFolderFlow[7] по умолчанию = emptyList()
         }
         val vm = HomeViewModel(repo)

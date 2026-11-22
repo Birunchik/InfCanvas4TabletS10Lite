@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
@@ -60,7 +60,7 @@ class InfiniteCanvasViewTest {
         imageCache = BoardImageCache(
             imageAssetStorage = storage,
             scope = imageCacheScope,
-            onImageLoaded = {}
+            onImageLoaded = {},
         )
         quadtree = Quadtree.build(emptyList())
     }
@@ -84,7 +84,7 @@ class InfiniteCanvasViewTest {
         onCanvasViewportSizeChanged: (Int, Int) -> Unit = { _, _ -> },
         onStrokeCommitted: (Stroke) -> Unit = {},
         onEraseStrokes: (Set<Long>) -> Unit = {},
-        onTransform: (Float, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+        onTransform: (Float, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     ) {
         InfiniteCanvasView(
             quadtree = quadtree,
@@ -168,7 +168,7 @@ class InfiniteCanvasViewTest {
             bitmap[30, 30]
         )
         val hasRedBackground = samples.any { px ->
-            px.red > 0.8f && px.green < 0.2f && px.blue < 0.2f
+            (px.red > 0.8f) && (px.green < 0.2f) && (px.blue < 0.2f)
         }
         assertTrue(
             "хотя бы один из пикселей должен быть красным фоном, получено: $samples",

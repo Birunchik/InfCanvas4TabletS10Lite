@@ -135,7 +135,7 @@ class CalculateWidthForBrushTest {
             val brush = BrushFixtures.brush(type, baseSize = 0.1f)
             assertTrue(
                 "$type: width должен быть >= 0.5f, получено ${calculateWidthForBrush(brush, 0f)}",
-                calculateWidthForBrush(brush, pressure = 0f) >= 0.5f
+                calculateWidthForBrush(brush, pressure = 0f) >= 0.5f,
             )
         }
     }

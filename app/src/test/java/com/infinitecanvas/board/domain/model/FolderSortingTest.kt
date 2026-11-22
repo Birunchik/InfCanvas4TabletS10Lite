@@ -8,7 +8,7 @@ class FolderSortingTest {
     private fun folder(
         id: Long,
         sortOrder: Int = 0,
-        createdAt: Long = 0L
+        createdAt: Long = 0L,
     ) = Folder(id = id, name = "F$id", sortOrder = sortOrder, createdAt = createdAt)
 
     @Test

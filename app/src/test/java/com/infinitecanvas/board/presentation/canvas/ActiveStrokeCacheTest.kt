@@ -4,7 +4,6 @@ import com.infinitecanvas.board.presentation.canvas.renderer.ActiveStrokeCache
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -34,7 +33,7 @@ class ActiveStrokeCacheTest {
         assertEquals(
             "Initial -1 (не 0): drawActiveStroke отличает «ещё не рисовали» от «сброшено»",
             -1,
-            cache.pointCount
+            cache.pointCount,
         )
         assertNull(cache.geometry)
     }

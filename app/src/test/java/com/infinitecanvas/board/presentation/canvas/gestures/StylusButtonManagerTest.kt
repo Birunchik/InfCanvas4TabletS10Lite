@@ -39,11 +39,11 @@ class StylusButtonManagerTest {
     private fun createManager(
         clock: FakeClock = FakeClock(),
         activeTool: () -> CanvasTool = { CanvasTool.ERASER },
-        onStateChanged: () -> Unit = {}
+        onStateChanged: () -> Unit = {},
     ): StylusButtonManager = StylusButtonManager(
         activeTool = activeTool,
         onStateChanged = onStateChanged,
-        clock = { clock.nowMs }
+        clock = { clock.nowMs },
     )
 
     /**
@@ -237,7 +237,7 @@ class StylusButtonManagerTest {
     fun `updateEraserPos stores position`() {
         val m = createManager()
         m.updateEraserPos(Offset(10f, 20f))
-        assertEquals(Offset(10f, 20f), m.eraserScreenPos)
+        assertEquals(Offset(10f, 20f) as Any, m.eraserScreenPos as Any)
     }
 
     @Test

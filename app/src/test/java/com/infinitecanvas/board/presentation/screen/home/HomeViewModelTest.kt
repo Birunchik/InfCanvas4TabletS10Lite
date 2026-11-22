@@ -27,14 +27,14 @@ class HomeViewModelTest {
         title = title,
         updatedAt = 0L,
         thumbnailPath = null,
-        strokesCount = 0
+        strokesCount = 0,
     )
 
-    private fun folder(id: Long, name: String) = Folder(
+    private fun folder(id: Long, name: String = "Work") = Folder(
         id = id,
         name = name,
         createdAt = 0L,
-        sortOrder = 0
+        sortOrder = 0,
     )
 
     /**
@@ -92,7 +92,7 @@ class HomeViewModelTest {
             allBoardsFlow.value = listOf(
                 board(1, "Project Alpha"),
                 board(2, "project beta"),
-                board(3, "Notes")
+                board(3, "Notes"),
             )
         }
         val vm = HomeViewModel(repo)

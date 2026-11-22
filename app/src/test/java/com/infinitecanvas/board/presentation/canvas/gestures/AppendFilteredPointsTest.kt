@@ -42,7 +42,7 @@ class AppendFilteredPointsTest {
     private fun mockViewport(
         scale: Double = 1.0,
         offsetX: Double = 0.0,
-        offsetY: Double = 0.0
+        offsetY: Double = 0.0,
     ): ViewportState {
         val vp = mockk<ViewportState>()
         every { vp.scale } returns scale
@@ -66,7 +66,7 @@ class AppendFilteredPointsTest {
         position: Offset,
         pressure: Float = 0.5f,
         uptimeMillis: Long = 1000L,
-        historical: List<HistoricalChange> = emptyList()
+        historical: List<HistoricalChange> = emptyList(),
     ): PointerInputChange {
         val c = mockk<PointerInputChange>()
         every { c.position } returns position
@@ -76,7 +76,7 @@ class AppendFilteredPointsTest {
         return c
     }
 
-    private fun point(x: Double, y: Double) = StrokePoint(x, y, 0.5f, 0L)
+    private fun point(x: Double = 0.0, y: Double = 0.0) = StrokePoint(x, y, 0.5f, 0L)
 
     // ---------- первая точка ----------
 
@@ -99,7 +99,7 @@ class AppendFilteredPointsTest {
     fun `point below min distance filtered out`() {
         // scale=1 → minDist = min(4/1, 2.5) = 2.5
         val vp = mockViewport(scale = 1.0)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // screen(1,1) → world(1,1), dist от (0,0) ≈ 1.41 < 2.5
         val added = appendFilteredPoints(mockChange(Offset(1f, 1f)), vp, target)
 
@@ -110,7 +110,7 @@ class AppendFilteredPointsTest {
     @Test
     fun `point above min distance added`() {
         val vp = mockViewport(scale = 1.0) // minDist = 2.5
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // screen(10,10) → world(10,10), dist ≈ 14.14 > 2.5
         val added = appendFilteredPoints(mockChange(Offset(10f, 10f)), vp, target)
 
@@ -132,7 +132,7 @@ class AppendFilteredPointsTest {
             historical = listOf(
                 mockHistorical(Offset(10f, 10f), 100L),
                 mockHistorical(Offset(20f, 20f), 200L),
-                mockHistorical(Offset(30f, 30f), 300L)
+                mockHistorical(Offset(30f, 30f), 300L),
             )
         )
 
@@ -185,7 +185,7 @@ class AppendFilteredPointsTest {
     @Test
     fun `returns false when all points filtered`() {
         val vp = mockViewport(scale = 1.0)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         assertFalse(appendFilteredPoints(mockChange(Offset(0.1f, 0.1f)), vp, target))
     }
 
@@ -208,7 +208,7 @@ class AppendFilteredPointsTest {
     @Test
     fun `incremental path untouched when no point added`() {
         val vp = mockViewport(scale = 1.0) // minDist = 2.5
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         val path = Path()
 
         val added = appendFilteredPoints(
@@ -228,7 +228,7 @@ class AppendFilteredPointsTest {
     fun `min dist world scales down with high zoom`() {
         // scale=10 → minDist = min(4/10, 2.5) = 0.4
         val vp = mockViewport(scale = 10.0)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // screen(5,5) → world(0.5, 0.5), dist ≈ 0.71 > 0.4 → added
         assertTrue(appendFilteredPoints(mockChange(Offset(5f, 5f)), vp, target))
     }
@@ -237,7 +237,7 @@ class AppendFilteredPointsTest {
     fun `min dist world capped at 2 point 5 on low zoom`() {
         // scale=0.25 → 4/0.25 = 16, но кап 2.5
         val vp = mockViewport(scale = 0.25)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // screen(10,0) → world(40, 0), dist = 40 > 2.5 → added
         assertTrue(appendFilteredPoints(mockChange(Offset(10f, 0f)), vp, target))
     }
@@ -246,7 +246,7 @@ class AppendFilteredPointsTest {
     fun `custom minStepPx not effective when cap kicks in`() {
         // minStepPx=20, scale=1 → 20/1 = 20, cap 2.5
         val vp = mockViewport(scale = 1.0)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // world(3, 0) → dist = 3 > 2.5 (но < 20) → добавлен благодаря капу
         assertTrue(appendFilteredPoints(mockChange(Offset(3f, 0f)), vp, target, minStepPx = 20.0))
     }
@@ -255,7 +255,7 @@ class AppendFilteredPointsTest {
     fun `custom minStepPx effective at high zoom without cap`() {
         // minStepPx=20, scale=10 → 20/10 = 2.0, не капнуто
         val vp = mockViewport(scale = 10.0)
-        val target = mutableListOf(point(0.0, 0.0))
+        val target = mutableListOf(point())
         // screen(15,0) → world(1.5, 0) < 2.0 → filtered
         assertFalse(appendFilteredPoints(mockChange(Offset(15f, 0f)), vp, target, minStepPx = 20.0))
         // screen(25,0) → world(2.5, 0) > 2.0 → added

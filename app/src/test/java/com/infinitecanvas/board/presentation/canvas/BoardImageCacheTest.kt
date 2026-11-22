@@ -72,7 +72,7 @@ class BoardImageCacheTest {
         storage: ImageAssetStorage,
         decoder: ImageDecoder,
         onImageLoaded: () -> Unit = {},
-        maxCacheKb: Int = 64 * 1024
+        maxCacheKb: Int = 64 * 1024,
     ): BoardImageCache = BoardImageCache(
         imageAssetStorage = storage,
         scope = this,

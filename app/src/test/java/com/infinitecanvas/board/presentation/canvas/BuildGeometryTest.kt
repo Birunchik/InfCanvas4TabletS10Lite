@@ -41,7 +41,7 @@ class BuildGeometryTest {
     // ---------- n = 1 ----------
 
     @Test
-    fun `singlePoint_nonHighlighter_returnsDotCenter`() {
+    fun singlePoint_nonHighlighter_returnsDotCenter() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 10f)
         val stroke = StrokeRealFixtures.withExplicitBounds(
             id = 1,
@@ -51,10 +51,11 @@ class BuildGeometryTest {
         )
 
         val cached = buildGeometry(stroke, Path())
+        val dotCenter = cached.singleDotCenter
 
-        assertNotNull("singleDotCenter должен быть задан", cached.singleDotCenter)
-        assertEquals(50f, cached.singleDotCenter!!.x, EPS)
-        assertEquals(60f, cached.singleDotCenter!!.y, EPS)
+        assertNotNull("singleDotCenter должен быть задан", dotCenter)
+        assertEquals(50f, dotCenter!!.x, EPS)
+        assertEquals(60f, dotCenter.y, EPS)
         // BALLPOINT baseSize=10, pressure=0.5 → width=10 → radius=5
         assertEquals(5f, cached.singleDotRadius, EPS)
         assertFalse(cached.isHighlighter)
@@ -285,7 +286,7 @@ class BuildGeometryTest {
         val b = path.getBounds()
         assertTrue(
             "path должен быть очищен, bounds=(${b.left}, ${b.top}, ${b.right}, ${b.bottom})",
-            b.left == 0f && b.top == 0f && b.right == 0f && b.bottom == 0f
+            (b.left == 0f) && (b.top == 0f) && (b.right == 0f) && (b.bottom == 0f)
         )
     }
 

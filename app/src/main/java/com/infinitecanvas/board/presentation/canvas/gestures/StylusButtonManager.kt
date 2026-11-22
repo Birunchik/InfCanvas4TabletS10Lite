@@ -17,7 +17,8 @@ import com.infinitecanvas.board.domain.model.CanvasTool
 // переключатели: сбрасываются при отпускании и не «залипают».
 internal class StylusButtonManager(
     private val activeTool: () -> CanvasTool,
-    private val onStateChanged: () -> Unit
+    private val onStateChanged: () -> Unit,
+    private val clock: () -> Long = { SystemClock.uptimeMillis() }
 ) {
     var eraserScreenPos by mutableStateOf<Offset?>(null)
     var isHardwareEraserHeld by mutableStateOf(false)
@@ -36,7 +37,7 @@ internal class StylusButtonManager(
                 (state and MotionEvent.BUTTON_SECONDARY) != 0
 
         if (pressed && !wasStylusButtonPressed) {
-            val now = SystemClock.uptimeMillis()
+            val now = clock()
             if (now - lastButtonPressTimeMs <= 400L) {
                 isHardwareLassoHeld = true
                 isHardwareEraserHeld = false

@@ -62,6 +62,7 @@ fun InfiniteCanvasView(
     majorGridColor: Color = Color(0xFFC4C9D0)
 ) {
     val renderState = rememberCanvasRenderState()
+    val interactionState = rememberCanvasInteractionState()
 
     val gestureHandler = rememberCanvasGestureHandler(
         viewportState = viewportState,
@@ -75,6 +76,7 @@ fun InfiniteCanvasView(
         isZoomLocked = isZoomLocked,
         allowFingerDrawing = allowFingerDrawing,
         renderState = renderState,
+        interactionState = interactionState,
         onStrokeCommitted = onStrokeCommitted,
         onEraseStrokes = onEraseStrokes,
         onStrokesSelected = onStrokesSelected,

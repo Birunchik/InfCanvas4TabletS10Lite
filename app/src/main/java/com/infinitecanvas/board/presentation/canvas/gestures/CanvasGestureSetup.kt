@@ -16,6 +16,7 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import com.infinitecanvas.board.presentation.canvas.CanvasGestureHandler
+import com.infinitecanvas.board.presentation.canvas.CanvasInteractionState
 import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
 import com.infinitecanvas.board.presentation.canvas.renderer.CanvasRenderState
 
@@ -32,6 +33,7 @@ fun rememberCanvasGestureHandler(
     isZoomLocked: Boolean,
     allowFingerDrawing: Boolean,
     renderState: CanvasRenderState,
+    interactionState: CanvasInteractionState,
     onStrokeCommitted: (Stroke) -> Unit,
     onEraseStrokes: (Set<Long>) -> Unit,
     onStrokesSelected: (Set<Long>) -> Unit,
@@ -69,6 +71,7 @@ fun rememberCanvasGestureHandler(
     return remember {
         CanvasGestureHandler(
             renderState = renderState,
+            interactionState = interactionState,
             viewportState = { currentViewport },
             activeTool = { currentTool },
             activeBrush = { currentBrush },

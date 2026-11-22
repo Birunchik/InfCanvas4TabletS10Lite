@@ -1,6 +1,6 @@
 package com.infinitecanvas.board.presentation.canvas
 
-import androidx.compose.ui.graphics.Path
+
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
@@ -168,7 +168,7 @@ class StrokeGeometryCacheTest {
         )
         val g = cache.getOrBuild(s)
         assertEquals(50f, g.singleDotCenter!!.x, EPS_F)
-        assertEquals(60f, g.singleDotCenter!!.y, EPS_F)
+        assertEquals(60f, g.singleDotCenter.y, EPS_F)
 
         cache.shiftCachedStrokes(setOf(1L), dx = 10.0, dy = 20.0)
 
@@ -181,7 +181,7 @@ class StrokeGeometryCacheTest {
         val gAfter = cache.getOrBuild(translated)
 
         assertEquals(60f, gAfter.singleDotCenter!!.x, EPS_F)
-        assertEquals(80f, gAfter.singleDotCenter!!.y, EPS_F)
+        assertEquals(80f, gAfter.singleDotCenter.y, EPS_F)
     }
 
     // ---------- LRU ----------
@@ -191,7 +191,7 @@ class StrokeGeometryCacheTest {
         val cache = StrokeGeometryCache()
         for (i in 1L..1501L) cache.getOrBuild(twoPointStroke(i))
 
-        assertEquals(1500, cache.cachedIds().size)
+        assertEquals(1500, cache.cachedIdsSnapshot().size)
     }
 
     @Test
@@ -199,27 +199,13 @@ class StrokeGeometryCacheTest {
         val cache = StrokeGeometryCache()
         for (i in 1L..1501L) cache.getOrBuild(twoPointStroke(i))
 
-        val ids = cache.cachedIds()
+        val ids = cache.cachedIdsSnapshot()
         assertFalse("id=1 должен быть вытеснен первым", 1L in ids)
         assertTrue("id=1501 должен остаться", 1501L in ids)
         assertTrue("id=1500 должен остаться", 1500L in ids)
     }
 
     // ---------- helpers ----------
-
-    /**
-     * Через рефлексию: приватное поле cache. Альтернатива — добавить
-     * @VisibleForTesting fun cachedIds() в продакшн-класс. Если в проекте
-     * политика "no reflection in tests" — сделайте его internal.
-     */
-    private fun StrokeGeometryCache.cachedIds(): Set<Long> {
-        val f = StrokeGeometryCache::class.java.getDeclaredField("cache")
-        f.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val map = f.get(this) as Map<Long, *>
-        return map.keys.toSet()
-    }
-
     private companion object {
         const val EPS = 1e-3
         const val EPS_F = 1e-4f

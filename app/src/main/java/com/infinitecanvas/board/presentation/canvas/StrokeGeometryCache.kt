@@ -1,5 +1,6 @@
 package com.infinitecanvas.board.presentation.canvas
 
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -37,7 +38,6 @@ class CachedStrokeGeometry(
     val variableSegments: List<VariableStrokeSegment> = emptyList(),
     val brushType: BrushType? = null
 )
-
 // Скрэтч-массивы на поток: построение геометрии иначе аллоцировало бы 8 FloatArray на штрих,
 // а это прямые GC-паузы при массовом кэш-миссе во время кадра.
 internal class GeometryScratchBuffers {
@@ -167,6 +167,9 @@ class StrokeGeometryCache {
         maxX = b.maxX + dx,
         maxY = b.maxY + dy
     )
+
+    @VisibleForTesting
+    internal fun cachedIdsSnapshot(): Set<Long> = cache.keys.toSet()
 }
 
 // Путь не создаём внутри: активный штрих переиспользует renderState.activePath,

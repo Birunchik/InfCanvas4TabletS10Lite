@@ -2,14 +2,14 @@ package com.infinitecanvas.board.presentation.screen.board
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
-import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
+import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 
 class BoardViewModelFactory(
     private val repository: BoardRepository,
-    private val thumbnailGenerator: ThumbnailGenerator,
-    private val imageAssetStorage: ImageAssetStorage
+    private val thumbnailGenerator: BoardThumbnailer,
+    private val imageStore: ImageStore
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     // isAssignableFrom — чтобы фабрика работала и для подклассов BoardViewModel;
@@ -19,7 +19,7 @@ class BoardViewModelFactory(
             return BoardViewModel(
                 repository = repository,
                 thumbnailGenerator = thumbnailGenerator,
-                imageAssetStorage = imageAssetStorage
+                imageStore = imageStore
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

@@ -109,7 +109,7 @@ app ──> feature:home ──> core:designsystem
 ## Фаза 2. `:core:data` (2–3 дня, риск средний)
 
 1. Модуль `core/data` (`com.android.library`): Room (+KSP), `exifinterface`, `kotlinx-coroutines`, `:core:domain`.
-2. Перенести `data/local/db`, `data/local/storage`, `data/repository`. `ImageAssetStorage : ImageStore`, `ThumbnailGenerator : BoardThumbnailer`.
+2. Перенести `../core/data`, `../core/data`, `../core/data`. `ImageAssetStorage : ImageStore`, `ThumbnailGenerator : BoardThumbnailer`.
 3. **Разорвать `ThumbnailGenerator` ↔ presentation окончательно:** он должен зависеть только от `Brush.calculateWidth` (domain) и собственного рендера. В HEAD он ещё импортирует `presentation.canvas.calculateWidthForBrush` — фаза 0 это устраняет; проверить `grep`.
 4. Room: `exportSchema = true`, схемы в `core/data/schemas`, `room.schemaLocation` в KSP; DAO/entities остаются `internal` (или `public` только для `BoardRepositoryImpl`).
 5. Тесты (перенос + новые):

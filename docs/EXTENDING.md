@@ -20,7 +20,7 @@
 | Шаг | Файл | Что делать |
 |---|---|---|
 | 1 | `../core/domain` | Добавить тип **в конец** enum (без перестановок) |
-| 2 | `data/local/storage/BoardFileStorage.kt` | `FORMAT_VERSION++`, ветка чтения `ordinal → type` для старых версий, запись/чтение нового типа |
+| 2 | `../core/data` | `FORMAT_VERSION++`, ветка чтения `ordinal → type` для старых версий, запись/чтение нового типа |
 | 3 | `../core/domain` | `Stroke.create`: визуальная ширина → padding `bounds` |
 | 4 | `../core/domain` | `isStrokeHitByCircle`: полуширина для ластика |
 | 5 | `presentation/canvas/StrokeGeometryCache.kt` | `buildGeometry` (ветка), `calculateWidthForBrush` (множители) |
@@ -28,7 +28,7 @@
 | 7 | `presentation/screen/board/viewConrollers/BoardToolController.kt` | `selectBrushType`: opacity по умолчанию |
 | 8 | `presentation/screen/board/huds/BoardTopBar.kt` | Чип в `BrushSelector` |
 | 9 | `app/src/main/res/values/strings.xml` | Подпись `brush_*` |
-| 10 | `data/local/storage/ThumbnailGenerator.kt` | Как кисть выглядит на превью (если отличается) |
+| 10 | `../core/data` | Как кисть выглядит на превью (если отличается) |
 
 **Не забыть:**
 - Дорожка `Stroke.create → bounds → кэш геометрии`: кэш валидируется по `bounds`, поэтому новый тип влияет на отступы иначе, чем старый, — старые доски перечитаются с новым паддингом (это нормально, но визуально сдвинет границы выделения).
@@ -58,14 +58,14 @@
 Самое дорогое расширение: объект должен переживать сохранение, попадать в превью, выделяться, стираться и отменяться. Полный маршрут:
 
 1. **Модель** — `../core/domain`: новый data-класс + поле в `BoardDocument`/`BoardModels`.
-2. **Формат** — `data/local/storage/BoardFileStorage.kt`: новые поля в конец (порядок критичен), `FORMAT_VERSION++`, чтение старых версий с дефолтом. Для списка объектов — `writeInt(count)` перед циклом, как у `strokes`/`images`.
-3. **Репозиторий** — `data/repository/BoardRepositoryImpl.kt` + интерфейс `../core/domain`: `loadBoard`/`saveBoardContent`.
+2. **Формат** — `../core/data`: новые поля в конец (порядок критичен), `FORMAT_VERSION++`, чтение старых версий с дефолтом. Для списка объектов — `writeInt(count)` перед циклом, как у `strokes`/`images`.
+3. **Репозиторий** — `../core/data` + интерфейс `../core/domain`: `loadBoard`/`saveBoardContent`.
 4. **Состояние** — новый `XxxController` в `presentation/screen/board/viewConrollers/` по образцу `BoardImageController` (StateFlow + мутации + `onContentChanged()`), зарегистрировать в `BoardViewModel` и проксировать методы.
 5. **Отрисовка** — `presentation/canvas/renderer/`: отдельный слой; порядок — в `InfiniteCanvasView` (под штрихами / над штрихами / поверх мира).
 6. **Хит-тест и жесты** — `presentation/canvas/gestures/ImageGestureHandler.kt` как образец (углы, тело, приоритет в `detectCanvasGestures`).
 7. **Выделение** — взаимоисключение через `onSelectionActivated` (сейчас: штрихи ↔ картинки).
 8. **Undo** — сейчас стек только для штрихов (см. §5).
-9. **Превью** — `data/local/storage/ThumbnailGenerator.kt`.
+9. **Превью** — `../core/data`.
 10. **Массштаб** — размер файла: полнохолстовый payload переписывается каждые 1.5 с; для тяжёлых объектов продумай отдельный файл или журнал.
 
 **Не забыть:** абсолютные пути не хранить в модели (только имя файла); при удалении объекта удаление файла-ассета должно идти **после** сохранения ссылки, иначе останется битая ссылка.
@@ -117,7 +117,7 @@
 
 ## 7. Home: папки, сортировка, превью
 
-- Сортировка — `data/local/db/BoardDao.kt` (`ORDER BY`), затем поле в `HomeUiState` + меню в `HomeScreen`.
+- Сортировка — `../core/data` (`ORDER BY`), затем поле в `HomeUiState` + меню в `HomeScreen`.
 - Новый фильтр — `HomeUiState.FolderFilter` (sealed) + ветка в `HomeViewModel.boardsFlow`.
 - Поиск — `HomeViewModel` (сейчас подстрока без нормализации регистра).
 - Превью — `BoardPreviewCard.kt`: ключ Coil обязан включать `updatedAt`, иначе картинка не обновится.

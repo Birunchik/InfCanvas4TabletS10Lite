@@ -6,7 +6,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
-import android.os.Build
+import android.util.Log
+import com.infinitecanvas.board.domain.port.ImageStore
+import com.infinitecanvas.board.domain.port.ImportedImage
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
@@ -22,26 +24,22 @@ import androidx.core.graphics.scale
  * Все операции с файлами — на Dispatchers.IO: decode/compress блокируют поток.
  * Локальная копия нужна, потому что доступ к content Uri живёт не вечно.
  */
-class ImageAssetStorage(private val context: Context) {
+class ImageAssetStorage(private val context: Context) : ImageStore {
 
     private val assetsRootDir = File(context.filesDir, "board_assets").apply { mkdirs() }
 
-    data class ImportedImageResult(
-        val fileName: String,
-        val widthPx: Int,
-        val heightPx: Int
-    )
 
-    fun getBoardAssetsDir(boardId: Long): File =
+
+    private fun getBoardAssetsDir(boardId: Long): File =
         File(assetsRootDir, "board_$boardId").apply { mkdirs() }
 
-    fun getImageFile(boardId: Long, fileName: String): File =
+    override fun fileFor(boardId: Long, fileName: String): File =
         File(getBoardAssetsDir(boardId), fileName)
 
     /**
      * Создаёт временный файл в cacheDir для съёмки фото через ActivityResultContracts.TakePicture.
      */
-    fun createTempCameraFile(): File {
+    override fun createTempCameraFile(): File {
         val cameraDir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
         return File(cameraDir, "capture_${System.nanoTime()}.jpg")
     }
@@ -52,26 +50,26 @@ class ImageAssetStorage(private val context: Context) {
      * Порядок критичен: сначала копируем Uri в cache, пока permission валиден,
      * и только потом decodeFile. Повторное открытие Uri после рестарта может упасть.
      */
-    suspend fun importFromUri(boardId: Long, sourceUri: Uri): ImportedImageResult? =
+    override suspend fun importFromUri(boardId: Long, uri: Uri): ImportedImage? =
         withContext(Dispatchers.IO) {
             val resolver = context.contentResolver
 
             // 1. Создаем локальную временную копию из Uri, пока права на чтение активны
             val tempInputFile = File(context.cacheDir, "import_temp_${System.currentTimeMillis()}.tmp")
             try {
-                resolver.openInputStream(sourceUri)?.use { input ->
+                resolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(tempInputFile).use { output ->
                         input.copyTo(output)
                     }
                 } ?: run {
-                    android.util.Log.e("ImageAssetStorage", "Failed to open input stream for uri: $sourceUri")
+                    Log.e("ImageAssetStorage", "Failed to open input stream for uri: $uri")
                     return@withContext null
                 }
             } catch (e: SecurityException) {
-                android.util.Log.e("ImageAssetStorage", "No permission to read uri: $sourceUri", e)
+                Log.e("ImageAssetStorage", "No permission to read uri: $uri", e)
                 return@withContext null
             } catch (e: Exception) {
-                android.util.Log.e("ImageAssetStorage", "Failed to copy uri to cache: $sourceUri", e)
+                Log.e("ImageAssetStorage", "Failed to copy uri to cache: $uri", e)
                 return@withContext null
             }
 
@@ -151,7 +149,7 @@ class ImageAssetStorage(private val context: Context) {
                     }
 
                     val fileName = "img_${System.nanoTime()}.webp"
-                    val targetFile = getImageFile(boardId, fileName)
+                    val targetFile = fileFor(boardId, fileName)
                     val tempTargetFile = File(targetFile.parentFile, "$fileName.tmp")
 
                     FileOutputStream(tempTargetFile).use { fos ->
@@ -162,7 +160,7 @@ class ImageAssetStorage(private val context: Context) {
                     if (targetFile.exists()) targetFile.delete()
                     tempTargetFile.renameTo(targetFile)
 
-                    ImportedImageResult(
+                    ImportedImage(
                         fileName = fileName,
                         widthPx = processedBitmap.width,
                         heightPx = processedBitmap.height
@@ -175,7 +173,7 @@ class ImageAssetStorage(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("ImageAssetStorage", "Unexpected error processing image file", e)
+                Log.e("ImageAssetStorage", "Unexpected error processing image file", e)
                 null
             } finally {
                 // Обязательно удаляем временный файл-источник
@@ -185,11 +183,11 @@ class ImageAssetStorage(private val context: Context) {
             }
         }
 
-    suspend fun deleteImageFile(boardId: Long, fileName: String) = withContext(Dispatchers.IO) {
-        getImageFile(boardId, fileName).delete()
+    override suspend fun delete(boardId: Long, fileName: String) = withContext(Dispatchers.IO) {
+        fileFor(boardId, fileName).delete()
     }
 
-    suspend fun deleteAllBoardAssets(boardId: Long) = withContext(Dispatchers.IO) {
+    override suspend fun deleteAll(boardId: Long) = withContext(Dispatchers.IO) {
         val dir = File(assetsRootDir, "board_$boardId")
         if (dir.exists()) {
             dir.deleteRecursively()

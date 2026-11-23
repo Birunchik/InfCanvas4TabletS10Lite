@@ -4,7 +4,6 @@ import com.infinitecanvas.board.data.local.db.BoardDao
 import com.infinitecanvas.board.data.local.db.BoardEntity
 import com.infinitecanvas.board.data.local.db.FolderEntity
 import com.infinitecanvas.board.data.local.storage.BoardFileStorage
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.domain.model.BoardDocument
 import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.BoardSummary
@@ -12,6 +11,7 @@ import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.sortedForDisplay
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.map
 class BoardRepositoryImpl(
     private val dao: BoardDao,
     private val fileStorage: BoardFileStorage,
-    private val imageAssetStorage: ImageAssetStorage
+    private val imageStore: ImageStore
 ) : BoardRepository {
 
     // Flow из Room эмитит на любое изменение таблицы; маппинг в домен дешёвый,
@@ -131,6 +131,6 @@ class BoardRepositoryImpl(
     override suspend fun deleteBoard(boardId: Long) {
         dao.deleteBoard(boardId)
         fileStorage.deleteBoardFiles(boardId)
-        imageAssetStorage.deleteAllBoardAssets(boardId)
+        imageStore.deleteAll(boardId)
     }
 }

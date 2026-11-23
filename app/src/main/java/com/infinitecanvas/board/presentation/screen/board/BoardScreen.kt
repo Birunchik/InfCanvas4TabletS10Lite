@@ -14,7 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardBottomHud
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardMediaHud
 import com.infinitecanvas.board.presentation.screen.board.huds.BoardTopBar
@@ -26,7 +26,7 @@ import com.infinitecanvas.board.presentation.screen.board.huds.CanvasLayer
 fun BoardScreen(
     boardId: Long,
     viewModel: BoardViewModel,
-    imageAssetStorage: ImageAssetStorage,
+    imageStore: ImageStore,
     onNavigateBack: () -> Unit
 ) {
     // Ключ boardId: переход на другую доску без пересоздания экрана должен вызвать
@@ -64,7 +64,7 @@ fun BoardScreen(
         CanvasLayer(
             boardId = boardId,
             viewModel = viewModel,
-            imageAssetStorage = imageAssetStorage,
+            imageStore = imageStore,
             isZoomLocked = isZoomLocked
         )
 

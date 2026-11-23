@@ -4,11 +4,11 @@ import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
-import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardImageController
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardStrokeController
@@ -32,8 +32,8 @@ import kotlin.time.Duration.Companion.milliseconds
 // штрихов/картинок и лишь связывает их колбэками, поэтому flush читает их снапшоты.
 class BoardViewModel(
     private val repository: BoardRepository,
-    private val thumbnailGenerator: ThumbnailGenerator,
-    imageAssetStorage: ImageAssetStorage
+    private val thumbnailGenerator: BoardThumbnailer,
+    imageStore: ImageStore
 ) : ViewModel() {
 
     private var currentBoardId: Long? = null
@@ -65,7 +65,7 @@ class BoardViewModel(
     )
 
     private val imageController: BoardImageController = BoardImageController(
-        imageAssetStorage = imageAssetStorage,
+        imageStore = imageStore,
         scope = viewModelScope,
         viewportController = viewportController,
         onContentChanged = { scheduleAutoSave(regenerateThumbnail = true) },

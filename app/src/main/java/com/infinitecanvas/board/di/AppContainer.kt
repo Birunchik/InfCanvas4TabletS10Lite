@@ -8,6 +8,9 @@ import com.infinitecanvas.board.data.local.storage.BoardFileStorage
 import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
 import com.infinitecanvas.board.data.repository.BoardRepositoryImpl
+import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.ImageStore
+import com.infinitecanvas.board.domain.repository.BoardRepository
 
 /**
  * Ручной composition root. Пока живёт в app; в Phase 1+ переедет рядом с App,
@@ -31,21 +34,23 @@ class AppContainer(context: Context) {
 
     // Room хранит только метаданные, геометрия — в файлах (BoardFileStorage):
     // согласованность этих двух хранилищ обеспечивает репозиторий, не Room.
-    val database: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
+    private val database: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
 
-    val fileStorage: BoardFileStorage by lazy { BoardFileStorage(appContext) }
+    private val fileStorage: BoardFileStorage by lazy { BoardFileStorage(appContext) }
 
-    val imageAssetStorage: ImageAssetStorage by lazy { ImageAssetStorage(appContext) }
+    private val imageAssetStorage: ImageAssetStorage by lazy { ImageAssetStorage(appContext) }
 
-    val thumbnailGenerator: ThumbnailGenerator by lazy {
-        ThumbnailGenerator(fileStorage = fileStorage, imageAssetStorage = imageAssetStorage)
+    val imageStore: ImageStore get() = imageAssetStorage
+
+    val thumbnailGenerator: BoardThumbnailer by lazy {
+        ThumbnailGenerator(fileStorage = fileStorage, imageStore = imageAssetStorage)
     }
 
-    val repository: BoardRepositoryImpl by lazy {
+    val repository: BoardRepository by lazy {
         BoardRepositoryImpl(
             dao = database.boardDao(),
             fileStorage = fileStorage,
-            imageAssetStorage = imageAssetStorage,
+            imageStore = imageAssetStorage,
         )
     }
 }

@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
                 AppNavHost(
                     repository = container.repository,
                     thumbnailGenerator = container.thumbnailGenerator,
-                    imageAssetStorage = container.imageAssetStorage,
+                    imageStore = container.imageStore,
                 )
             }
         }

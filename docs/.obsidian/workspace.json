@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Без названия.md",
+                "file": "Modularization.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Без названия"
+              "title": "Modularization"
             }
           },
           {
@@ -216,8 +216,8 @@
   },
   "active": "207b5ce0c6dda5d2",
   "lastOpenFiles": [
-    "Modularization.md",
     "MODULARIZATION_PLAN.md",
+    "Modularization.md",
     "EXTENDING.md",
     "Без названия.md"
   ]

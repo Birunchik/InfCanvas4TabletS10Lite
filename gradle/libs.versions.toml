@@ -77,6 +77,7 @@ volley = { group = "com.android.volley", name = "volley", version.ref = "volley"
 
 # База данных Room
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-common = { group = "androidx.room", name = "room-common", version.ref = "roomCommon" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 

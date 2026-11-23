@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.kover)
 }
 
@@ -49,9 +48,6 @@ android {
         }
         animationsDisabled = true
     }
-    sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
-    }
 }
 kover {
     reports {
@@ -59,13 +55,9 @@ kover {
         variant("release") { html { }; xml { } }
     }
 }
-
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
     implementation(project(":core:domain"))
+    implementation(project(":core:data"))
 
     implementation(libs.androidx.compose.runtime)
     implementation(libs.kotlinx.collections.immutable)
@@ -91,11 +83,6 @@ dependencies {
 
     // Сетевые запросы
     implementation(libs.volley)
-
-    // База данных Room
-    implementation(libs.androidx.room.common)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.room.compiler)
 
     //unit test ──
     testImplementation(libs.bundles.unitTest)

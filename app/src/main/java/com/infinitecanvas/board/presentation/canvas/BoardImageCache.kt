@@ -5,7 +5,7 @@ import android.util.LruCache
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
+import com.infinitecanvas.board.domain.port.ImageStore
 import java.util.Collections
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -21,7 +21,7 @@ fun interface ImageDecoder {
 }
 
 class BoardImageCache(
-    private val imageAssetStorage: ImageAssetStorage,
+    private val imageStore: ImageStore,
     private val scope: CoroutineScope,
     private val onImageLoaded: () -> Unit,
     // НОВЫЕ параметры с дефолтами — обратная совместимость сохранена:
@@ -47,7 +47,7 @@ class BoardImageCache(
             scope.launch {
                 try {
                     val loaded = withContext(ioDispatcher) {
-                        val file = imageAssetStorage.getImageFile(boardId, fileName)
+                        val file = imageStore.fileFor(boardId, fileName)
                         if (!file.exists()) return@withContext null
                         decoder.decode(file)
                     }

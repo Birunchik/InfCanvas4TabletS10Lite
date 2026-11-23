@@ -14,6 +14,8 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.calculateWidth
+import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.ImageStore
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.hypot
@@ -27,14 +29,14 @@ import androidx.core.graphics.withTranslation
 // уходит в IO. Параллельные вызовы для одной доски делят один .tmp — не запускать.
 class ThumbnailGenerator(
     private val fileStorage: BoardFileStorage,
-    private val imageAssetStorage: ImageAssetStorage
-) {
+    private val imageStore: ImageStore
+) : BoardThumbnailer {
     // null = видимого контента нет (пустая доска), и файл превью при этом удаляется.
     // Вызывающий не должен сохранять null как путь: в БД останется ссылка на удалённый файл.
-    suspend fun generateAndSave(
+    override suspend fun generateAndSave(
         boardId: Long,
         strokes: List<Stroke>,
-        images: List<BoardImage> = emptyList()
+        images: List<BoardImage>
     ): String? = withContext(Dispatchers.Default) {
         val outFile = fileStorage.getThumbnailFile(boardId)
         // Закреплённые изображения живут в экранных координатах и не часть мира —
@@ -110,7 +112,7 @@ class ThumbnailGenerator(
 
                 for (i in worldImages.indices) {
                     val img = worldImages[i]
-                    val file = imageAssetStorage.getImageFile(boardId, img.fileName)
+                    val file = imageStore.fileFor(boardId, img.fileName)
                     if (!file.exists()) continue
                     val subBitmap =
                         BitmapFactory.decodeFile(file.absolutePath, sampleOpts) ?: continue

@@ -1,7 +1,7 @@
 package com.infinitecanvas.board.presentation.canvas
 
 import androidx.compose.ui.graphics.ImageBitmap
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.testing.MutableDecoder
 import io.mockk.every
 import io.mockk.mockk
@@ -55,9 +55,9 @@ class BoardImageCacheTest {
     private fun missingFile(): File =
         File.createTempFile("board_cache_", ".png").apply { delete() }
 
-    private fun mockStorage(file: File): ImageAssetStorage {
-        val s = mockk<ImageAssetStorage>()
-        every { s.getImageFile(any(), any()) } returns file
+    private fun mockStorage(file: File): ImageStore {
+        val s = mockk<ImageStore>()
+        every { s.fileFor(any(), any()) } returns file
         return s
     }
 
@@ -69,12 +69,12 @@ class BoardImageCacheTest {
      * withContext(ioDispatcher). Без этого была бы гонка с реальными IO-потоками.
      */
     private fun TestScope.createCache(
-        storage: ImageAssetStorage,
+        storage: ImageStore,
         decoder: ImageDecoder,
         onImageLoaded: () -> Unit = {},
         maxCacheKb: Int = 64 * 1024,
     ): BoardImageCache = BoardImageCache(
-        imageAssetStorage = storage,
+        imageStore = storage,
         scope = this,
         onImageLoaded = onImageLoaded,
         decoder = decoder,
@@ -253,8 +253,8 @@ class BoardImageCacheTest {
         // Сценарий: файл ещё пишется на диск, exists()=false.
         // Ключ должен освободиться, чтобы следующий кадр попробовал снова.
         var currentFile = missingFile()
-        val storage = mockk<ImageAssetStorage>()
-        every { storage.getImageFile(any(), any()) } answers { currentFile }
+        val storage = mockk<ImageStore>()
+        every { storage.fileFor(any(), any()) } answers { currentFile }
 
         val decoder = MutableDecoder(fakeBitmap())
         val cache = createCache(storage, decoder)

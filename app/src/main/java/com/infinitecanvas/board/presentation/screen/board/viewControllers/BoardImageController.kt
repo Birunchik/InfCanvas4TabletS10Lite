@@ -2,9 +2,9 @@ package com.infinitecanvas.board.presentation.screen.board.viewControllers
 
 import android.net.Uri
 import android.util.Log
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.port.ImageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,7 +21,7 @@ import kotlin.math.min
 // Инвариант: bounds pinned-картинок — в screen-координатах, остальных — в world.
 // Любая работа с bounds обязана сначала смотреть на isPinned.
 class BoardImageController(
-    private val imageAssetStorage: ImageAssetStorage,
+    private val imageStore: ImageStore,
     private val scope: CoroutineScope,
     private val viewportController: BoardViewportController,
     private val onContentChanged: () -> Unit,
@@ -101,14 +101,14 @@ class BoardImageController(
         }
     }
 
-    fun createTempCameraFile(): File = imageAssetStorage.createTempCameraFile()
+    fun createTempCameraFile(): File = imageStore.createTempCameraFile()
 
     // Центр — середина viewport в world, ширина — 45 % экрана, но не больше исходника;
     // делим на scale, чтобы вставка не зависела от текущего зума.
     fun insertImageFromUri(boardId: Long, uri: Uri) {
         if (boardId <= 0L) return
         scope.launch {
-            val imported = imageAssetStorage.importFromUri(boardId, uri)
+            val imported = imageStore.importFromUri(boardId, uri)
             if (imported == null) {
                 Log.e("BoardImageController", "Failed to import image from uri: $uri")
                 return@launch
@@ -211,7 +211,7 @@ class BoardImageController(
         _images.update { list -> list.filterNot { it.id == targetId } }
         _selectedImageId.value = null
         scope.launch {
-            imageAssetStorage.deleteImageFile(boardId, target.fileName)
+            imageStore.delete(boardId, target.fileName)
         }
         onContentChanged()
     }

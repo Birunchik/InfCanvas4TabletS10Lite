@@ -8,5 +8,5 @@ data class Folder(
     val sortOrder: Int = 0,
     val createdAt: Long = System.currentTimeMillis()
 )
-public fun List<Folder>.sortedForDisplay(): List<Folder> =
+ fun List<Folder>.sortedForDisplay(): List<Folder> =
     sortedWith(compareBy({ it.sortOrder }, { it.createdAt }))

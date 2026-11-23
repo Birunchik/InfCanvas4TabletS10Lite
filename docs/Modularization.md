@@ -60,26 +60,16 @@ app ──> feature:home ──> core:designsystem
 
 > **Про `core:domain`:** рекомендую Android-library (а не `kotlin("jvm")`), потому что порты картинок используют `Uri`/`File`. Запрет на Compose/Room сохраняется и проверяется автоматически. Если хочется 100% JVM-модуль — сделайте порты без `Uri` (`ImageSource`), это +1 день и лишний слой.
 
-## Фаза 1. `:core:domain` (1–2 дня, риск низкий)
+## Фаза 2. `:core:data` (2–3 дня, риск средний)
 
-1. `core/domain/build.gradle.kts`: `com.android.library` + Kotlin, `namespace = "com.infinitecanvas.board.domain"`, зависимости: `kotlinx-coroutines-core`.
-2. Перенести `../core/domain`, `../core/domain`, `../core/domain` **без изменения пакетов** — тогда импорты в 60+ файлах не меняются, diff — только перемещения.
-3. Добавить сюда же **порты** (интерфейсы), чтобы разорвать `presentation → data`:
-   ```kotlin
-   // core/domain/.../port/ImageStore.kt
-   interface ImageStore {
-       fun fileFor(boardId: Long, fileName: String): File
-       fun createTempCameraFile(): File
-       suspend fun importFromUri(boardId: Long, uri: Uri): ImportedImage?
-       suspend fun delete(boardId: Long, fileName: String)
-       suspend fun deleteAll(boardId: Long)
-   }
-   interface BoardThumbnailer {
-       suspend fun generateAndSave(boardId: Long, strokes: List<Stroke>, images: List<BoardImage>): String?
-   }
-   ```
-   `ImportedImage` — доменный data-класс (fileName, widthPx, heightPx).
-4. Перенести чистые тесты (`FolderSortingTest`) в `core/domain/src/test`; добавить отсутствующие unit-тесты `ViewportState`, `Quadtree`, `LassoSelector` — они чистые, моки не нужны. Это дешёвая страховка перед перемещениями.
-5. В `:app` — `implementation(project(":core:domain"))`.
+1. Модуль `core/data` (`com.android.library`): Room (+KSP), `exifinterface`, `kotlinx-coroutines`, `:core:domain`.
+2. Перенести `../core/data`, `../core/data`, `../core/data`. `ImageAssetStorage : ImageStore`, `ThumbnailGenerator : BoardThumbnailer`.
+3. **Разорвать `ThumbnailGenerator` ↔ presentation окончательно:** он должен зависеть только от `Brush.calculateWidth` (domain) и собственного рендера. В HEAD он ещё импортирует `presentation.canvas.calculateWidthForBrush` — фаза 0 это устраняет; проверить `grep`.
+4. Room: `exportSchema = true`, схемы в `core/data/schemas`, `room.schemaLocation` в KSP; DAO/entities остаются `internal` (или `public` только для `BoardRepositoryImpl`).
+5. Тесты (перенос + новые):
+   - `BoardFileStorageTest`: round-trip текущей версии, чтение v1/v2/v3/v4, битый magic, обрезанный файл, `strokeCount`/`pointCount` с мусором (проверка на OOM/`IllegalArgumentException`);
+   - `BoardRepositoryImplTest`: фейковый DAO + временная папка, порядок «файл → Room», `thumbnailPath = null` не затирает превью, удаление;
+   - `ThumbnailGeneratorTest` (Robolectric): пустая доска, штрихи, отсутствующий файл картинки, размер webp.
+6. `:app` подключает `:core:data` и биндит реализации в `AppContainer`.
 
-**Критерий:** `core:domain` не содержит `android.*`/`androidx.compose.*`/`androidx.room.*`; тесты домена идут на JVM без Robolectric; `:app` собирается без правок логики.
+**Критерий:** `core:data` не импортирует `presentation`/`feature`/`canvas`; data-тесты идут отдельной задачей; схема Room в git.

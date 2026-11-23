@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
+import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.presentation.canvas.BoardImageCache
 import com.infinitecanvas.board.presentation.canvas.InfiniteCanvasView
 import com.infinitecanvas.board.presentation.screen.board.BoardViewModel
@@ -16,7 +16,7 @@ import com.infinitecanvas.board.presentation.screen.board.BoardViewModel
 internal fun CanvasLayer(
     boardId: Long,
     viewModel: BoardViewModel,
-    imageAssetStorage: ImageAssetStorage,
+    imageStore: ImageStore,
     isZoomLocked: Boolean
 ) {
     val viewportState by viewModel.viewportState.collectAsState()
@@ -34,11 +34,11 @@ internal fun CanvasLayer(
     // кэш лишь инкрементит тик: Canvas перерисуется, когда картинка догрузится.
     var imageLoadTick by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    // Ключ — imageAssetStorage: кэш не должен переживать смену хранилища, иначе
+    // Ключ — imageStore: кэш не должен переживать смену хранилища, иначе
     // отдавал бы bitmap удалённых или подменённых файлов.
-    val imageCache = remember(imageAssetStorage) {
+    val imageCache = remember(imageStore) {
         BoardImageCache(
-            imageAssetStorage = imageAssetStorage,
+            imageStore = imageStore,
             scope = scope,
             onImageLoaded = { imageLoadTick++ }
         )

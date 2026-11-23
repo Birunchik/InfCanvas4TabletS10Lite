@@ -83,7 +83,7 @@ app ──> feature:home ──> core:designsystem
 ## Фаза 1. `:core:domain` (1–2 дня, риск низкий)
 
 1. `core/domain/build.gradle.kts`: `com.android.library` + Kotlin, `namespace = "com.infinitecanvas.board.domain"`, зависимости: `kotlinx-coroutines-core`.
-2. Перенести `domain/model`, `domain/spatial`, `domain/repository` **без изменения пакетов** — тогда импорты в 60+ файлах не меняются, diff — только перемещения.
+2. Перенести `../core/domain`, `../core/domain`, `../core/domain` **без изменения пакетов** — тогда импорты в 60+ файлах не меняются, diff — только перемещения.
 3. Добавить сюда же **порты** (интерфейсы), чтобы разорвать `presentation → data`:
    ```kotlin
    // core/domain/.../port/ImageStore.kt

@@ -1,3 +1,5 @@
+# InfCanvas: план выхода из монолитного `:app`
+
 **Цель:** разбить единственный Gradle-модуль на модули с проверяемыми границами, не меняя поведение приложения и не теряя покрытие тестами.
 
 **Принцип:** сначала подготовка (тесты, DI-шов, схема Room), потом извлечение модулей по одному, от самого «чистого» к самому связанному. Каждая фаза — отдельный зелёный PR, приложение собирается и работает после каждой.
@@ -58,20 +60,26 @@ app ──> feature:home ──> core:designsystem
 
 > **Про `core:domain`:** рекомендую Android-library (а не `kotlin("jvm")`), потому что порты картинок используют `Uri`/`File`. Запрет на Compose/Room сохраняется и проверяется автоматически. Если хочется 100% JVM-модуль — сделайте порты без `Uri` (`ImageSource`), это +1 день и лишний слой.
 
----
+## Фаза 1. `:core:domain` (1–2 дня, риск низкий)
 
-## Фаза 0. Подготовка (0,5–1 день)
+1. `core/domain/build.gradle.kts`: `com.android.library` + Kotlin, `namespace = "com.infinitecanvas.board.domain"`, зависимости: `kotlinx-coroutines-core`.
+2. Перенести `../core/domain`, `../core/domain`, `../core/domain` **без изменения пакетов** — тогда импорты в 60+ файлах не меняются, diff — только перемещения.
+3. Добавить сюда же **порты** (интерфейсы), чтобы разорвать `presentation → data`:
+   ```kotlin
+   // core/domain/.../port/ImageStore.kt
+   interface ImageStore {
+       fun fileFor(boardId: Long, fileName: String): File
+       fun createTempCameraFile(): File
+       suspend fun importFromUri(boardId: Long, uri: Uri): ImportedImage?
+       suspend fun delete(boardId: Long, fileName: String)
+       suspend fun deleteAll(boardId: Long)
+   }
+   interface BoardThumbnailer {
+       suspend fun generateAndSave(boardId: Long, strokes: List<Stroke>, images: List<BoardImage>): String?
+   }
+   ```
+   `ImportedImage` — доменный data-класс (fileName, widthPx, heightPx).
+4. Перенести чистые тесты (`FolderSortingTest`) в `core/domain/src/test`; добавить отсутствующие unit-тесты `ViewportState`, `Quadtree`, `LassoSelector` — они чистые, моки не нужны. Это дешёвая страховка перед перемещениями.
+5. В `:app` — `implementation(project(":core:domain"))`.
 
-Без неё двигать код опасно: unit-тесты сейчас **не компилируются**.
-
-1. **Зафиксировать рабочее дерево.** Сейчас незакоммичены `Brush.kt`, `ThumbnailGenerator.kt`, `StrokeGeometryCache.kt`: рефакторинг `calculateWidthForBrush → Brush.calculateWidth` уже сделал `CalculateWidthForBrushTest.kt` невалидным. Варианты:
-   - обновить тест на `Brush.calculateWidth` (предпочтительно) и закоммитить;
-   - либо вернуть тонкий wrapper `fun calculateWidthForBrush(...) = brush.calculateWidth(...)` на один коммит.
-   Критерий: `.\gradlew.bat :app:testDebugUnitTest` зелёный.
-2. **Проверить, что в тестах нет «мёртвых» отчётов.** В `app/build/test-results` лежат `BoardFileStorageTest` (7) и `BoardViewModelTest` (2), которых нет в дереве. Решить судьбу: восстановить (рекомендую, это самые рискованные зоны) или осознанно удалить.
-3. **DI-шов.** Вынести создание `AppDatabase`, `BoardFileStorage`, `ImageAssetStorage`, `ThumbnailGenerator`, `BoardRepositoryImpl`, Coil `ImageLoader` из `MainActivity` в `di/AppContainer.kt` (обычный класс с ленивыми полями). Никакого Hilt — достаточно ручного контейнера. Это ключевой enabler: модули будут отдавать фабрики, а `app` — связывать.
-4. **Room schema export.** `@Database(exportSchema = false)` → `true`, добавить ksp-аргумент `room.schemaLocation` и закоммитить `core/data/schemas/.../1.json`. Без этого миграции при выносе модуля станут необратимыми.
-5. **Baseline.** Записать: clean build, incremental build, время `testDebugUnitTest`, размер APK. Подключить `kover`/`jacoco` (сейчас нет) — чтобы доказать, что при переносе кода покрытие не упало.
-6. **CI.** GitHub Actions (или локальный скрипт): `gradlew :app:testDebugUnitTest :app:lintDebug`. Instrumented — ночным прогоном на эмуляторе.
-
-**Выход:** зелёные тесты, контейнер зависимостей, схема Room в git, метрики «до».
+**Критерий:** `core:domain` не содержит `android.*`/`androidx.compose.*`/`androidx.room.*`; тесты домена идут на JVM без Robolectric; `:app` собирается без правок логики.

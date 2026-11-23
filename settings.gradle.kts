@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "InfCanvas"
 include(":app")
+include(":core:domain")

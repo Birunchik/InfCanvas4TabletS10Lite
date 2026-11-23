@@ -19,10 +19,10 @@
 
 | Шаг | Файл | Что делать |
 |---|---|---|
-| 1 | `domain/model/Brush.kt` | Добавить тип **в конец** enum (без перестановок) |
+| 1 | `../core/domain` | Добавить тип **в конец** enum (без перестановок) |
 | 2 | `data/local/storage/BoardFileStorage.kt` | `FORMAT_VERSION++`, ветка чтения `ordinal → type` для старых версий, запись/чтение нового типа |
-| 3 | `domain/model/Stroke.kt` | `Stroke.create`: визуальная ширина → padding `bounds` |
-| 4 | `domain/spatial/Quadtree.kt` | `isStrokeHitByCircle`: полуширина для ластика |
+| 3 | `../core/domain` | `Stroke.create`: визуальная ширина → padding `bounds` |
+| 4 | `../core/domain` | `isStrokeHitByCircle`: полуширина для ластика |
 | 5 | `presentation/canvas/StrokeGeometryCache.kt` | `buildGeometry` (ветка), `calculateWidthForBrush` (множители) |
 | 6 | `presentation/canvas/renderer/CanvasRenderer.kt` | `drawCachedGeometry`: как рисовать (Stroke / Fill / свои слои) |
 | 7 | `presentation/screen/board/viewConrollers/BoardToolController.kt` | `selectBrushType`: opacity по умолчанию |
@@ -41,7 +41,7 @@
 
 ## 2. Новый инструмент (`CanvasTool`)
 
-1. `domain/model/CanvasTool.kt` — добавить значение.
+1. `../core/domain` — добавить значение.
 2. `presentation/canvas/CanvasGestureHandler.kt` — `detectCanvasGestures`: **место в приоритетах** (выше рисования, но ниже выделения/фото, если новый инструмент не должен их перебивать) + отдельный `handleXxx` по образцу `handleLassoGesture`.
 3. `presentation/canvas/gestures/CanvasGestures.kt` — низкоуровневые хелперы (накопление точек, hit-test).
 4. `presentation/screen/board/viewConrollers/BoardToolController.kt` — `selectXxx()` (и снятие выделения через `onClearSelectionRequested`).
@@ -57,9 +57,9 @@
 
 Самое дорогое расширение: объект должен переживать сохранение, попадать в превью, выделяться, стираться и отменяться. Полный маршрут:
 
-1. **Модель** — `domain/model/`: новый data-класс + поле в `BoardDocument`/`BoardModels`.
+1. **Модель** — `../core/domain`: новый data-класс + поле в `BoardDocument`/`BoardModels`.
 2. **Формат** — `data/local/storage/BoardFileStorage.kt`: новые поля в конец (порядок критичен), `FORMAT_VERSION++`, чтение старых версий с дефолтом. Для списка объектов — `writeInt(count)` перед циклом, как у `strokes`/`images`.
-3. **Репозиторий** — `data/repository/BoardRepositoryImpl.kt` + интерфейс `domain/repository/BoardRepository.kt`: `loadBoard`/`saveBoardContent`.
+3. **Репозиторий** — `data/repository/BoardRepositoryImpl.kt` + интерфейс `../core/domain`: `loadBoard`/`saveBoardContent`.
 4. **Состояние** — новый `XxxController` в `presentation/screen/board/viewConrollers/` по образцу `BoardImageController` (StateFlow + мутации + `onContentChanged()`), зарегистрировать в `BoardViewModel` и проксировать методы.
 5. **Отрисовка** — `presentation/canvas/renderer/`: отдельный слой; порядок — в `InfiniteCanvasView` (под штрихами / над штрихами / поверх мира).
 6. **Хит-тест и жесты** — `presentation/canvas/gestures/ImageGestureHandler.kt` как образец (углы, тело, приоритет в `detectCanvasGestures`).

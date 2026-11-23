@@ -65,6 +65,8 @@ ksp {
 }
 
 dependencies {
+    implementation(project(":core:domain"))
+
     implementation(libs.androidx.compose.runtime)
     implementation(libs.kotlinx.collections.immutable)
     // Базовые компоненты Android и архитектура

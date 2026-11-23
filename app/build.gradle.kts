@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
+    alias(libs.plugins.kover)
 }
 
 composeCompiler {
@@ -41,15 +42,26 @@ android {
         compose = true
     }
 
-    // ── Фаза 0: testOptions ──
+
     testOptions {
-        // Robolectric: Android-ресурсы и классы (Path/Bitmap) доступны в src/test
         unitTests {
             isIncludeAndroidResources = true
         }
-        // Убирает часть флаки в instrumented (анимации кнопок/навигации)
         animationsDisabled = true
     }
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+kover {
+    reports {
+        variant("debug")   { html { }; xml { } }
+        variant("release") { html { }; xml { } }
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

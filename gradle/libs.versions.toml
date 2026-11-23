@@ -44,6 +44,8 @@ androidxTestUiautomator = "2.4.1"
 junitKtx = "1.3.0"
 uiTestJunit4 = "1.12.1"
 
+kover = "0.9.11"
+
 
 [libraries]
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinxCollectionsImmutable" }
@@ -132,3 +134,4 @@ androidTest = [
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }

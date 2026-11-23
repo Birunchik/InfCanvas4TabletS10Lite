@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [FolderEntity::class, BoardEntity::class],
     version = 1,
-    exportSchema = false
+    exportSchema = true,
 )
 // Схема v1 без миграций: при изменении entities нужен Migration (или явный
 // fallback), иначе Room упадёт у пользователей с уже созданной БД.

@@ -10,10 +10,8 @@ import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.renderer.applyChiselForwardTransform
-import com.infinitecanvas.board.domain.model.BrushDefaults.HIGHLIGHTER_WIDTH_MULTIPLIER
-import kotlin.math.abs
+import com.infinitecanvas.board.domain.model.calculateWidth
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
 // 1500 записей — компромисс: при сильном зуме в кадр попадают тысячи штрихов,
@@ -190,7 +188,7 @@ fun buildGeometry(
     }
     val strokeColor = baseColor.copy(alpha = effectiveAlpha)
 
-    val effectiveWidth = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 0f)
+    val effectiveWidth = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 0f)
     // Bounds highlighters расширяем на 0.85 ширины: chisel-трансформ растягивает путь по Y,
     // и по исходным bounds отсечение обрезало бы концы штриха.
     val effectiveBounds = if (isHighlighter) {
@@ -229,7 +227,7 @@ fun buildGeometry(
             color = strokeColor,
             isHighlighter = false,
             singleDotCenter = Offset(p.x.toFloat(), p.y.toFloat()),
-            singleDotRadius = calculateWidthForBrush(brush, p.pressure, speedPxPerMs = 0f) * 0.5f,
+            singleDotRadius = brush.calculateWidth(p.pressure, speedPxPerMs = 0f) * 0.5f,
             brushType = brush.type
         )
     }
@@ -262,7 +260,7 @@ fun buildGeometry(
                 for (i in 0 until n) {
                     pressureSum += rawPoints[i].pressure
                 }
-                val width = calculateWidthForBrush(brush, pressureSum / n, 0f)
+                val width = brush.calculateWidth(pressureSum / n, 0f)
                 CachedStrokeGeometry(
                     bounds = effectiveBounds,
                     path = targetPath,
@@ -272,20 +270,6 @@ fun buildGeometry(
                     brushType = brush.type
                 )
             }
-
-            BrushType.PENCIL -> {
-                // Просто строим обычный гладкий путь. Никакого джиттера.
-                buildSmoothQuadraticPathFromArrays(sx, sy, n, targetPath)
-                CachedStrokeGeometry(
-                    bounds = effectiveBounds,
-                    path = targetPath,
-                    color = strokeColor,
-                    isHighlighter = false,
-                    strokeWidth = effectiveWidth, // Оставляем стандартную ширину
-                    brushType = brush.type
-                )
-            }
-
             BrushType.FOUNTAIN -> {
                 val widths = computeSmoothedWidthsInScratch(rawPoints, sx, sy, n, brush, scratch)
                 buildVariableWidthOutlinePath(rawPoints, widths, targetPath)
@@ -353,92 +337,6 @@ private fun buildSmoothQuadraticPathFromArrays(
         outPath.lineTo(xs[i], ys[i])
     }
 }
-
-private fun buildQuantizedFountainSegments(
-    rawPoints: List<StrokePoint>,
-    xs: FloatArray,
-    ys: FloatArray,
-    n: Int,
-    brush: Brush,
-    scratch: GeometryScratchBuffers
-): List<VariableStrokeSegment> {
-    if (n < 2) return emptyList()
-
-    val widths = computeSmoothedWidthsInScratch(rawPoints, xs, ys, n, brush, scratch)
-    val result = ArrayList<VariableStrokeSegment>(min(n, 32))
-
-    val widthTolerance = max(0.32f, brush.baseSize * 0.08f)
-    val minPointsPerSegment = 4
-
-    var segStartIdx = 0
-    var currentBucketWidth = widths[0]
-
-    for (i in 1 until n) {
-        val w = widths[i]
-        val isLast = (i == n - 1)
-        val pointsInSeg = i - segStartIdx
-
-        if ((pointsInSeg >= minPointsPerSegment && abs(w - currentBucketWidth) > widthTolerance) || isLast) {
-            val avgWidth = (currentBucketWidth + w) * 0.5f
-            result.add(createSmoothSegmentFromArrays(xs, ys, segStartIdx, i, avgWidth))
-            segStartIdx = i
-            currentBucketWidth = w
-        }
-    }
-
-    return result
-}
-
-private fun createSmoothSegmentFromArrays(
-    xs: FloatArray,
-    ys: FloatArray,
-    startIdx: Int,
-    endIdx: Int,
-    width: Float
-): VariableStrokeSegment {
-    val path = Path()
-    val x0 = xs[startIdx]
-    val y0 = ys[startIdx]
-    path.moveTo(x0, y0)
-
-    var minX = x0
-    var minY = y0
-    var maxX = x0
-    var maxY = y0
-
-    for (i in (startIdx + 1)..endIdx) {
-        val prevX = xs[i - 1]
-        val prevY = ys[i - 1]
-        val currX = xs[i]
-        val currY = ys[i]
-
-        if (currX < minX) minX = currX
-        if (currY < minY) minY = currY
-        if (currX > maxX) maxX = currX
-        if (currY > maxY) maxY = currY
-
-        if (i == endIdx) {
-            path.lineTo(currX, currY)
-        } else {
-            val midX = (prevX + currX) * 0.5f
-            val midY = (prevY + currY) * 0.5f
-            path.quadraticTo(prevX, prevY, midX, midY)
-        }
-    }
-
-    val pad = (width * 0.65).coerceAtLeast(2.0)
-    return VariableStrokeSegment(
-        path = path,
-        width = width,
-        bounds = WorldBounds(
-            minX = minX - pad,
-            minY = minY - pad,
-            maxX = maxX + pad,
-            maxY = maxY + pad
-        )
-    )
-}
-
 // Скорость берём по скользящему окну ~45 мс, а не по последнему сегменту:
 // timestamp'ы дрожат, и мгновенная скорость давала бы рваную ширину.
 // Два прохода (вперёд/назад) с лимитом шага на пиксель убирают асимметрию на быстрых росчерках.
@@ -495,7 +393,7 @@ private fun computeSmoothedWidthsInScratch(
             }
         }
 
-        rawWidths[i] = calculateWidthForBrush(brush, smoothedPressure, smoothedSpeed)
+        rawWidths[i] = brush.calculateWidth(smoothedPressure, smoothedSpeed)
     }
 
     if (n < 3) return rawWidths
@@ -575,38 +473,4 @@ private fun buildVariableWidthOutlinePath(
     outPath.lineTo(rightX[0], rightY[0])
     outPath.close()
 }
-
-// Ширина возвращается в world px: при рендере её умножает масштаб трансформа, поэтому zoom здесь не учитывается.
-fun calculateWidthForBrush(
-    brush: Brush,
-    pressure: Float,
-    speedPxPerMs: Float = 0f
-): Float {
-    val p = pressure.coerceIn(0f, 1f)
-    return when (brush.type) {
-        BrushType.BALLPOINT -> {
-            brush.baseSize * (0.95f + p * 0.10f)
-        }
-
-        BrushType.PENCIL -> {
-            brush.baseSize * (0.85f + p * 0.15f)
-        }
-
-        BrushType.MARKER -> {
-            brush.baseSize * (0.98f + p * 0.05f)
-        }
-
-        BrushType.FOUNTAIN -> {
-            val pressureFactor = 0.4f + p * 1.2f
-            val speedNorm = (speedPxPerMs / 2.2f).coerceIn(0f, 1f)
-            val speedFactor = 1f - speedNorm * 0.58f
-            brush.baseSize * pressureFactor * speedFactor
-        }
-
-        BrushType.HIGHLIGHTER -> {
-            brush.baseSize * HIGHLIGHTER_WIDTH_MULTIPLIER
-        }
-    }.coerceAtLeast(0.5f)
-}
-
 private fun hypotFast(dx: Float, dy: Float): Float = sqrt(dx * dx + dy * dy)

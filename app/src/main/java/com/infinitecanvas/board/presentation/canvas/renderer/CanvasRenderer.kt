@@ -1,11 +1,5 @@
 package com.infinitecanvas.board.presentation.canvas.renderer
 
-import android.graphics.Bitmap
-import android.graphics.BitmapShader
-import android.graphics.Canvas
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
-import android.graphics.Shader
 import android.graphics.Matrix
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -18,12 +12,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.presentation.canvas.CachedStrokeGeometry
-import androidx.core.graphics.createBitmap
 import com.infinitecanvas.board.domain.model.BrushDefaults.HIGHLIGHTER_CHISEL_ANGLE_DEG
 
 
@@ -54,52 +45,6 @@ private fun getStroke(width: Float): Stroke {
     }
 }
 
-// --- Новая текстура карандаша (очень мелкое зерно) ---
-// Ленивая: 15 000 drawCircle стоят несколько мс, и платить их на старте за неиспользуемый карандаш нельзя.
-private val pencilTextureBitmap: Bitmap by lazy {
-    val size = 256
-    val bitmap = createBitmap(size, size)
-    val canvas = Canvas(bitmap)
-    val paint = android.graphics.Paint().apply {
-        color = android.graphics.Color.WHITE
-        style = android.graphics.Paint.Style.FILL
-        isAntiAlias = true // ВАЖНО: сглаживание для мягкой пыли
-    }
-
-    val random = java.util.Random(42)
-    // 15 000 мелких точек создают эффект плотной графитовой пыли
-    for (i in 0 until 15000) {
-        val x = random.nextFloat() * size
-        val y = random.nextFloat() * size
-        val radius = random.nextFloat() * 1.0f + 0.3f
-        paint.alpha = random.nextInt(155) + 100 // От 100 до 255 (плотный графит)
-        canvas.drawCircle(x, y, radius, paint)
-    }
-    bitmap
-}
-
-private val pencilPaintCache = HashMap<Int, android.graphics.Paint>()
-private fun getPencilPaint(colorArgb: Int, strokeWidth: Float, alpha: Float): android.graphics.Paint {
-    // Ключ — только цвет и alpha: ширину менять дёшево, а вот BitmapShader и ColorFilter
-    // создавать в кадре дорого. Возвращённый Paint нельзя хранить — следующий вызов его перезапишет.
-    val cacheKey = colorArgb + (alpha * 1000).toInt()
-    return pencilPaintCache.getOrPut(cacheKey) {
-        val shader = BitmapShader(pencilTextureBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        android.graphics.Paint().apply {
-            this.shader = shader
-            this.colorFilter = PorterDuffColorFilter(colorArgb, PorterDuff.Mode.SRC_IN)
-            this.style = android.graphics.Paint.Style.STROKE
-            this.strokeCap = android.graphics.Paint.Cap.ROUND
-            this.strokeJoin = android.graphics.Paint.Join.ROUND
-            this.isAntiAlias = true // ВКЛЮЧАЕМ сглаживание
-            // Делаем края рваными (шаг 2f, отклонение 0.5f)
-            this.pathEffect = android.graphics.DiscretePathEffect(2f, 0.5f)
-        }
-    }.apply {
-        this.strokeWidth = strokeWidth
-        this.alpha = (alpha * 255).toInt().coerceIn(0, 255)
-    }
-}
 fun DrawScope.drawCachedGeometry(
     geom: CachedStrokeGeometry,
     visibleWorldBounds: WorldBounds? = null
@@ -163,30 +108,6 @@ fun DrawScope.drawCachedGeometry(
                 color = geom.color,
                 style = getStroke(seg.width) // Используем кэш
             )
-        }
-        return
-    }
-
-    // --- Логика для карандаша ---
-    if (geom.brushType == BrushType.PENCIL) {
-        drawIntoCanvas { canvas ->
-            val color = geom.color.toArgb()
-            val baseAlpha = geom.color.alpha
-            val androidPath = geom.path.asAndroidPath()
-
-            // Три прохода разной ширины и альфы вместо blur-фильтра: так получается мягкий край
-            // и плотный центр, оставаясь в рамках обычного drawPath.
-            // 1. Широкий и полупрозрачный (создает мягкую тень/края)
-            val p1 = getPencilPaint(color, geom.strokeWidth * 1.3f, baseAlpha * 0.4f)
-            canvas.nativeCanvas.drawPath(androidPath, p1)
-
-            // 2. Средний (основная текстура)
-            val p2 = getPencilPaint(color, geom.strokeWidth * 0.9f, baseAlpha * 0.8f)
-            canvas.nativeCanvas.drawPath(androidPath, p2)
-
-            // 3. Узкий и плотный (создает темный центр)
-            val p3 = getPencilPaint(color, geom.strokeWidth * 0.5f, baseAlpha)
-            canvas.nativeCanvas.drawPath(androidPath, p3)
         }
         return
     }

@@ -47,7 +47,6 @@ class BoardToolController(
         _activeBrush.update { current ->
             val targetOpacity = when (type) {
                 BrushType.HIGHLIGHTER -> 0.4f
-                BrushType.PENCIL -> 0.9f     // Карандаш чуть прозрачный
                 else -> 1.0f
             }
             current.copy(

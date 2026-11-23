@@ -129,7 +129,6 @@ class Quadtree private constructor(
             BrushType.HIGHLIGHTER -> stroke.brush.baseSize * HIGHLIGHTER_WIDTH_MULTIPLIER * 0.5
             BrushType.FOUNTAIN -> stroke.brush.baseSize * 0.55
             BrushType.BALLPOINT -> stroke.brush.baseSize * 0.5
-            BrushType.PENCIL -> stroke.brush.baseSize * 0.6
             BrushType.MARKER -> stroke.brush.baseSize * 0.6
         }
         val hitThreshold = radius + visualHalfWidth

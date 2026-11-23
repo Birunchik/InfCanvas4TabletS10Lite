@@ -84,7 +84,6 @@ data class Stroke(
             val visualWidth = when (brush.type) {
                 BrushType.HIGHLIGHTER -> brush.baseSize * 6.0
                 BrushType.FOUNTAIN -> brush.baseSize * 1.6
-                BrushType.PENCIL -> brush.baseSize * 1.2
                 BrushType.MARKER -> brush.baseSize * 1.2
                 BrushType.BALLPOINT -> brush.baseSize * 1.05
             }

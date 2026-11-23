@@ -62,7 +62,7 @@ class BuildGeometryTest {
     }
 
     @Test
-    fun `singlePoint_nonHighlighter_pathIsEmpty`() {
+    fun `singlePoint nonHighlighter pathIsEmpty`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT)
         val stroke = StrokeRealFixtures.withExplicitBounds(
             id = 1,
@@ -78,7 +78,7 @@ class BuildGeometryTest {
     }
 
     @Test
-    fun `singlePoint_highlighter_returnsChiselPath`() {
+    fun `singlePoint highlighter returnsChiselPath`() {
         val brush = BrushFixtures.brush(BrushType.HIGHLIGHTER, baseSize = 10f)
         val stroke = StrokeRealFixtures.withExplicitBounds(
             id = 1,
@@ -98,7 +98,7 @@ class BuildGeometryTest {
     // ---------- n = 2: обычные кисти ----------
 
     @Test
-    fun `twoPoints_ballpoint_buildsPathWithoutDot`() {
+    fun `twoPoints ballpoint buildsPathWithoutDot`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 10f)
         val stroke = StrokeRealFixtures.created(1, 10.0 to 10.0, 90.0 to 90.0, brush = brush)
         val path = Path()
@@ -112,7 +112,7 @@ class BuildGeometryTest {
     }
 
     @Test
-    fun `twoPoints_marker_buildsPath`() {
+    fun `twoPoints marker buildsPath`() {
         val brush = BrushFixtures.brush(BrushType.MARKER, baseSize = 10f)
         val stroke = StrokeRealFixtures.created(1, 10.0 to 10.0, 90.0 to 90.0, brush = brush)
 
@@ -123,20 +123,9 @@ class BuildGeometryTest {
         assertFalse(cached.isHighlighter)
     }
 
-    @Test
-    fun `twoPoints_pencil_buildsPath`() {
-        val brush = BrushFixtures.brush(BrushType.PENCIL, baseSize = 10f)
-        val stroke = StrokeRealFixtures.created(1, 10.0 to 10.0, 90.0 to 90.0, brush = brush)
-
-        val cached = buildGeometry(stroke, Path())
-
-        assertFalse(cached.path.isEmpty)
-        assertNull(cached.singleDotCenter)
-        assertFalse(cached.isHighlighter)
-    }
 
     @Test
-    fun `twoPoints_fountain_buildsVariableOutlinePath`() {
+    fun `twoPoints fountain buildsVariableOutlinePath`() {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 10f)
         val stroke = StrokeRealFixtures.created(1, 10.0 to 10.0, 90.0 to 90.0, brush = brush)
 
@@ -151,7 +140,7 @@ class BuildGeometryTest {
     // ---------- highlighter: bounds ----------
 
     @Test
-    fun `highlighter_expandsBoundsByWidthMultiplier`() {
+    fun `highlighter expandsBoundsByWidthMultiplier`() {
         // buildGeometry для highlighter:
         //   effectiveWidth = calculateWidthForBrush(brush, 0.5f, 0f) = baseSize * 6.0
         //   extraPad = effectiveWidth * 0.85 = baseSize * 5.1
@@ -177,8 +166,8 @@ class BuildGeometryTest {
     }
 
     @Test
-    fun `nonHighlighter_boundsEqualStrokeBounds`() {
-        for (type in listOf(BrushType.BALLPOINT, BrushType.MARKER, BrushType.PENCIL, BrushType.FOUNTAIN)) {
+    fun `nonHighlighter boundsEqualStrokeBounds`() {
+        for (type in listOf(BrushType.BALLPOINT, BrushType.MARKER, BrushType.FOUNTAIN)) {
             val brush = BrushFixtures.brush(type, baseSize = 10f)
             val originalBounds = WorldBounds(10.0, 20.0, 110.0, 120.0)
             val stroke = StrokeRealFixtures.withExplicitBounds(

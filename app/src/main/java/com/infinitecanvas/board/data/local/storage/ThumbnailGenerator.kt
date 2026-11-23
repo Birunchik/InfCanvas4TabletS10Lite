@@ -13,7 +13,7 @@ import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.StrokePoint
-import com.infinitecanvas.board.presentation.canvas.calculateWidthForBrush
+import com.infinitecanvas.board.domain.model.calculateWidth
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.hypot
@@ -21,6 +21,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.core.graphics.withTranslation
 
 // Рендер — CPU-работа (Path/Bitmap), поэтому Dispatchers.Default, а запись файла
 // уходит в IO. Параллельные вызовы для одной доски делят один .tmp — не запускать.
@@ -97,61 +98,61 @@ class ThumbnailGenerator(
             val offsetX = (THUMB_WIDTH - scaledW) * 0.5f - (minX.toFloat() * scale)
             val offsetY = (THUMB_HEIGHT - scaledH) * 0.5f - (minY.toFloat() * scale)
 
-            canvas.save()
-            canvas.translate(offsetX, offsetY)
-            canvas.scale(scale, scale)
+            canvas.withTranslation(offsetX, offsetY) {
+                scale(scale, scale)
 
-            // inSampleSize=4 достаточен для 480 px и экономит память; subBitmap
-            // освобождается в finally, иначе при сотнях картинок будет OOM.
-            // 2. Сначала рисуем незакреплённые изображения (под штрихами)
-            val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-            val dstRect = RectF()
-            val sampleOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                // inSampleSize=4 достаточен для 480 px и экономит память; subBitmap
+                // освобождается в finally, иначе при сотнях картинок будет OOM.
+                // 2. Сначала рисуем незакреплённые изображения (под штрихами)
+                val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+                val dstRect = RectF()
+                val sampleOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
 
-            for (i in worldImages.indices) {
-                val img = worldImages[i]
-                val file = imageAssetStorage.getImageFile(boardId, img.fileName)
-                if (!file.exists()) continue
-                val subBitmap = BitmapFactory.decodeFile(file.absolutePath, sampleOpts) ?: continue
-                try {
-                    dstRect.set(
-                        img.bounds.minX.toFloat(),
-                        img.bounds.minY.toFloat(),
-                        img.bounds.maxX.toFloat(),
-                        img.bounds.maxY.toFloat()
+                for (i in worldImages.indices) {
+                    val img = worldImages[i]
+                    val file = imageAssetStorage.getImageFile(boardId, img.fileName)
+                    if (!file.exists()) continue
+                    val subBitmap =
+                        BitmapFactory.decodeFile(file.absolutePath, sampleOpts) ?: continue
+                    try {
+                        dstRect.set(
+                            img.bounds.minX.toFloat(),
+                            img.bounds.minY.toFloat(),
+                            img.bounds.maxX.toFloat(),
+                            img.bounds.maxY.toFloat()
+                        )
+                        drawBitmap(subBitmap, null, dstRect, bitmapPaint)
+                    } finally {
+                        subBitmap.recycle()
+                    }
+                }
+
+                // Порядок слоёв повторяет холст: изображения под штрихами. Менять
+                // порядок нельзя — превью станет непохожим на доску.
+                // 3. Поверх изображений рисуем штрихи
+                val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                }
+                val reusablePath = Path()
+
+                for (i in strokes.indices) {
+                    // invScale компенсирует canvas.scale: minVisibleWidth задаётся
+                    // в пикселях превью, чтобы тонкие штрихи не исчезали.
+                    drawStrokeOnAndroidCanvas(
+                        canvas = this,
+                        stroke = strokes[i],
+                        strokePaint = strokePaint,
+                        fillPaint = fillPaint,
+                        path = reusablePath,
+                        invScale = 1f / scale
                     )
-                    canvas.drawBitmap(subBitmap, null, dstRect, bitmapPaint)
-                } finally {
-                    subBitmap.recycle()
                 }
             }
-
-            // Порядок слоёв повторяет холст: изображения под штрихами. Менять
-            // порядок нельзя — превью станет непохожим на доску.
-            // 3. Поверх изображений рисуем штрихи
-            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeCap = Paint.Cap.ROUND
-                strokeJoin = Paint.Join.ROUND
-            }
-            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-            }
-            val reusablePath = Path()
-
-            for (i in strokes.indices) {
-                // invScale компенсирует canvas.scale: minVisibleWidth задаётся
-                // в пикселях превью, чтобы тонкие штрихи не исчезали.
-                drawStrokeOnAndroidCanvas(
-                    canvas = canvas,
-                    stroke = strokes[i],
-                    strokePaint = strokePaint,
-                    fillPaint = fillPaint,
-                    path = reusablePath,
-                    invScale = 1f / scale
-                )
-            }
-            canvas.restore()
 
             // Запись — в IO; temp+rename не даёт читателю увидеть недописанный webp.
             // fsync нет, поэтому при сбое питания файл превью можно потерять.
@@ -256,7 +257,7 @@ class ThumbnailGenerator(
         if (points.size == 1) {
             val p = points[0]
             fillPaint.color = colorWithAlpha
-            val r = max(calculateWidthForBrush(brush, p.pressure, 0f) * 0.5f, minVisibleWidth * 0.5f)
+            val r = max(brush.calculateWidth(p.pressure, 0f) * 0.5f, minVisibleWidth * 0.5f)
             canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), r, fillPaint)
             return
         }
@@ -301,7 +302,7 @@ class ThumbnailGenerator(
                 smoothedSpeed = smoothedSpeed * 0.7f + instSpeed * 0.3f
             }
 
-            halfWidths[i] = max(calculateWidthForBrush(brush, smoothedPressure, smoothedSpeed), minWidth) * 0.5f
+            halfWidths[i] = max(brush.calculateWidth(smoothedPressure, smoothedSpeed), minWidth) * 0.5f
         }
 
         for (i in 0 until n) {

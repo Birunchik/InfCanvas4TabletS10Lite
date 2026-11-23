@@ -2,6 +2,7 @@ package com.infinitecanvas.board.presentation.canvas
 
 import com.infinitecanvas.board.domain.model.BrushDefaults
 import com.infinitecanvas.board.domain.model.BrushType
+import com.infinitecanvas.board.domain.model.calculateWidth
 import com.infinitecanvas.board.testing.BrushFixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,28 +28,19 @@ class CalculateWidthForBrushTest {
     @Test
     fun `ballpoint low pressure is thinnest`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 100f)
-        assertEquals(95f, calculateWidthForBrush(brush, pressure = 0f), EPS)
+        assertEquals(95f, brush.calculateWidth(pressure = 0f), EPS)
     }
 
     @Test
     fun `ballpoint high pressure is thickest`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 100f)
-        assertEquals(105f, calculateWidthForBrush(brush, pressure = 1f), EPS)
+        assertEquals(105f, brush.calculateWidth(pressure = 1f), EPS)
     }
 
     @Test
     fun `ballpoint mid pressure is close to base`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 100f)
-        assertEquals(100f, calculateWidthForBrush(brush, pressure = 0.5f), EPS)
-    }
-
-    // --- PENCIL ---
-
-    @Test
-    fun `pencil pressure scales width`() {
-        val brush = BrushFixtures.brush(BrushType.PENCIL, baseSize = 100f)
-        assertEquals(85f, calculateWidthForBrush(brush, pressure = 0f), EPS)
-        assertEquals(100f, calculateWidthForBrush(brush, pressure = 1f), EPS)
+        assertEquals(100f, brush.calculateWidth(pressure = 0.5f), EPS)
     }
 
     // --- MARKER ---
@@ -56,8 +48,8 @@ class CalculateWidthForBrushTest {
     @Test
     fun `marker pressure scales width`() {
         val brush = BrushFixtures.brush(BrushType.MARKER, baseSize = 100f)
-        assertEquals(98f, calculateWidthForBrush(brush, pressure = 0f), EPS)
-        assertEquals(103f, calculateWidthForBrush(brush, pressure = 1f), EPS)
+        assertEquals(98f, brush.calculateWidth(pressure = 0f), EPS)
+        assertEquals(103f, brush.calculateWidth(pressure = 1f), EPS)
     }
 
     // --- FOUNTAIN: скорость и давление ---
@@ -66,14 +58,14 @@ class CalculateWidthForBrushTest {
     fun `fountain low pressure at rest is thinnest`() {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 100f)
         // pressureFactor = 0.4, speedFactor = 1.0
-        assertEquals(40f, calculateWidthForBrush(brush, pressure = 0f, speedPxPerMs = 0f), EPS)
+        assertEquals(40f, brush.calculateWidth(pressure = 0f, speedPxPerMs = 0f), EPS)
     }
 
     @Test
     fun `fountain high pressure at rest is thickest`() {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 100f)
         // pressureFactor = 1.6, speedFactor = 1.0
-        assertEquals(160f, calculateWidthForBrush(brush, pressure = 1f, speedPxPerMs = 0f), EPS)
+        assertEquals(160f, brush.calculateWidth(pressure = 1f, speedPxPerMs = 0f), EPS)
     }
 
     @Test
@@ -81,22 +73,22 @@ class CalculateWidthForBrushTest {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 100f)
         // pressure=0.5 → pressureFactor = 1.0
         // speed=2.2 → speedNorm=1.0 → speedFactor=0.42
-        assertEquals(42f, calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 2.2f), EPS)
+        assertEquals(42f, brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 2.2f), EPS)
     }
 
     @Test
     fun `fountain speed above threshold saturates`() {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 100f)
-        val atThreshold = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 2.2f)
-        val aboveThreshold = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 100f)
+        val atThreshold = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 2.2f)
+        val aboveThreshold = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 100f)
         assertEquals(atThreshold, aboveThreshold, EPS)
     }
 
     @Test
     fun `fountain slow speed is thinner than at rest`() {
         val brush = BrushFixtures.brush(BrushType.FOUNTAIN, baseSize = 100f)
-        val atRest = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 0f)
-        val slow = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 0.5f)
+        val atRest = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 0f)
+        val slow = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 0.5f)
         assertTrue("Slow fountain pen должен быть тоньше, чем в покое", slow < atRest)
     }
 
@@ -106,9 +98,9 @@ class CalculateWidthForBrushTest {
     fun `highlighter ignores pressure uses width multiplier`() {
         val brush = BrushFixtures.brush(BrushType.HIGHLIGHTER, baseSize = 10f)
         val expected = 10f * BrushDefaults.HIGHLIGHTER_WIDTH_MULTIPLIER
-        assertEquals(expected, calculateWidthForBrush(brush, pressure = 0f), EPS)
-        assertEquals(expected, calculateWidthForBrush(brush, pressure = 0.5f), EPS)
-        assertEquals(expected, calculateWidthForBrush(brush, pressure = 1f), EPS)
+        assertEquals(expected, brush.calculateWidth(pressure = 0f), EPS)
+        assertEquals(expected, brush.calculateWidth(pressure = 0.5f), EPS)
+        assertEquals(expected, brush.calculateWidth(pressure = 1f), EPS)
     }
 
     // --- Клампинг ---
@@ -116,16 +108,16 @@ class CalculateWidthForBrushTest {
     @Test
     fun `pressure below zero clamped to zero`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 100f)
-        val atZero = calculateWidthForBrush(brush, pressure = 0f)
-        val belowZero = calculateWidthForBrush(brush, pressure = -1f)
+        val atZero = brush.calculateWidth(pressure = 0f)
+        val belowZero = brush.calculateWidth(pressure = -1f)
         assertEquals(atZero, belowZero, EPS)
     }
 
     @Test
     fun `pressure above one clamped to one`() {
         val brush = BrushFixtures.brush(BrushType.BALLPOINT, baseSize = 100f)
-        val atOne = calculateWidthForBrush(brush, pressure = 1f)
-        val aboveOne = calculateWidthForBrush(brush, pressure = 2f)
+        val atOne = brush.calculateWidth(pressure = 1f)
+        val aboveOne = brush.calculateWidth(pressure = 2f)
         assertEquals(atOne, aboveOne, EPS)
     }
 
@@ -134,8 +126,8 @@ class CalculateWidthForBrushTest {
         for (type in BrushType.entries) {
             val brush = BrushFixtures.brush(type, baseSize = 0.1f)
             assertTrue(
-                "$type: width должен быть >= 0.5f, получено ${calculateWidthForBrush(brush, 0f)}",
-                calculateWidthForBrush(brush, pressure = 0f) >= 0.5f,
+                "$type: width должен быть >= 0.5f, получено ${brush.calculateWidth( 0f)}",
+                brush.calculateWidth(pressure = 0f) >= 0.5f,
             )
         }
     }
@@ -144,8 +136,8 @@ class CalculateWidthForBrushTest {
     fun `speed ignored for non-fountain brushes`() {
         for (type in BrushType.entries.filter { it != BrushType.FOUNTAIN }) {
             val brush = BrushFixtures.brush(type, baseSize = 100f)
-            val atRest = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 0f)
-            val fast = calculateWidthForBrush(brush, pressure = 0.5f, speedPxPerMs = 5f)
+            val atRest = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 0f)
+            val fast = brush.calculateWidth(pressure = 0.5f, speedPxPerMs = 5f)
             assertEquals("$type должен игнорировать скорость", atRest, fast, EPS)
         }
     }

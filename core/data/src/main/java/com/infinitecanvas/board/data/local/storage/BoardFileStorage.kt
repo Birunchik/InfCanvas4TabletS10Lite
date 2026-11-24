@@ -37,7 +37,7 @@ class BoardFileStorage(context: Context) {
 
     fun getThumbnailFile(boardId: Long): File = File(thumbsDir, "thumb_$boardId.webp")
 
-    private fun getBoardFile(boardId: Long): File = File(boardsDir, "board_$boardId.bin")
+    internal fun getBoardFile(boardId: Long): File = File(boardsDir, "board_$boardId.bin")
 
     // Запись идёт в .tmp и только потом заменяет целевой файл: обрыв не оставит
     // полузаписанный .bin. fsync нет — при потере питания можно потерять последнюю
@@ -140,7 +140,9 @@ class BoardFileStorage(context: Context) {
             // ordinal из файла может выйти за границы enum (файл новее): coerceIn
             // предотвращает краш ценой подмены типа последним элементом.
             val brushTypes = BrushType.entries
-            val strokeCount = input.readInt()
+            // coerceIn: файл мог быть повреждён или новее — без clamp ArrayList(huge)
+            // бросит OOM/IllegalCapacity до того, как EOFException поймает мусор.
+            val strokeCount = input.readInt().coerceIn(0, MAX_STROKE_COUNT)
             val strokes = ArrayList<Stroke>(strokeCount)
 
             for (i in 0 until strokeCount) {
@@ -177,7 +179,7 @@ class BoardFileStorage(context: Context) {
                     maxY = input.readDouble()
                 )
 
-                val pointCount = input.readInt()
+                val pointCount = input.readInt().coerceIn(0, MAX_POINT_COUNT)
                 val points = ArrayList<StrokePoint>(pointCount)
                 // В v1..v3 timestamp не писался: 0 означает «нет данных». Потребители
                 // (рендер/превью) должны сами подставлять дефолтный dt, а не делить на 0.
@@ -203,7 +205,7 @@ class BoardFileStorage(context: Context) {
             }
 
             val images = if (version >= 2) {
-                val imageCount = input.readInt()
+                val imageCount = input.readInt().coerceIn(0, MAX_IMAGE_COUNT)
                 ArrayList<BoardImage>(imageCount).apply {
                     for (i in 0 until imageCount) {
                         add(
@@ -240,5 +242,11 @@ class BoardFileStorage(context: Context) {
     private companion object {
         const val MAGIC_HEADER = 0x49434231 // "ICB1"
         const val FORMAT_VERSION = 4
+
+        // Верхние границы для счётчиков из файла. Реальные доски далеко ниже,
+        // но и мусор из повреждённого файла не должен приводить к OOM.
+        const val MAX_STROKE_COUNT = 1_000_000
+        const val MAX_POINT_COUNT = 1_000_000
+        const val MAX_IMAGE_COUNT = 10_000
     }
 }

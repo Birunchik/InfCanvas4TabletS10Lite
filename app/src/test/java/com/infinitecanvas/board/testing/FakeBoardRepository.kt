@@ -7,6 +7,7 @@ import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.repository.BoardRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,26 @@ class FakeBoardRepository : BoardRepository {
 
     var suggestedBoardTitleResult: (String) -> String = { prefix -> "$prefix 1" }
 
+    // ── API для BoardViewModelTest ──
+    // Что вернёт loadBoard. null — дефолт, чтобы старые тесты, рассчитывающие на
+    // «доска не найдена», не поменяли поведение.
+    var boardToLoad: BoardDocument? = null
+    // Все вызовы loadBoard — для проверки openBoard-guard.
+    val loadCalls = mutableListOf<Long>()
+    // Все вызовы saveBoardContent — для проверки дебаунса/flush.
+    val saveCalls = mutableListOf<SaveCall>()
+    // Если задан — saveBoardContent подвешивается на await() до complete().
+    // Нужно для NonCancellable-теста: держим запись в полёте, отменяем scope.
+    var saveGate: CompletableDeferred<Unit>? = null
+
+    data class SaveCall(
+        val boardId: Long,
+        val strokes: List<Stroke>,
+        val images: List<BoardImage>,
+        val viewport: ViewportState,
+        val thumbnailPath: String?
+    )
+
     override fun observeFolders(): Flow<List<Folder>> = foldersFlow.asStateFlow()
 
     override fun observeAllBoards(): Flow<List<BoardSummary>> = allBoardsFlow.asStateFlow()
@@ -45,7 +66,8 @@ class FakeBoardRepository : BoardRepository {
     override fun observeBoardsByFolder(folderId: Long): Flow<List<BoardSummary>> =
         boardsByFolderFlow.map { it[folderId] ?: emptyList() }
 
-    override fun observeUnassignedBoards(): Flow<List<BoardSummary>> = unassignedBoardsFlow.asStateFlow()
+    override fun observeUnassignedBoards(): Flow<List<BoardSummary>> =
+        unassignedBoardsFlow.asStateFlow()
 
     override suspend fun createFolder(name: String, colorArgb: Int?): Long {
         createFolderThrows?.let { throw it }
@@ -70,7 +92,10 @@ class FakeBoardRepository : BoardRepository {
     override suspend fun getSuggestedBoardTitle(prefix: String): String =
         suggestedBoardTitleResult(prefix)
 
-    override suspend fun loadBoard(boardId: Long): BoardDocument? = null
+    override suspend fun loadBoard(boardId: Long): BoardDocument? {
+        loadCalls += boardId
+        return boardToLoad
+    }
 
     override suspend fun saveBoardContent(
         boardId: Long,
@@ -78,7 +103,12 @@ class FakeBoardRepository : BoardRepository {
         images: List<BoardImage>,
         viewport: ViewportState,
         thumbnailPath: String?
-    ) = Unit
+    ) {
+        // await() до записи: если тест не отпустил gate, saveCalls остаётся пуст —
+        // это и есть точка наблюдения для NonCancellable-сценария.
+        saveGate?.await()
+        saveCalls += SaveCall(boardId, strokes, images, viewport, thumbnailPath)
+    }
 
     override suspend fun renameBoard(boardId: Long, newTitle: String) {
         renamedBoards += boardId to newTitle

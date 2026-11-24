@@ -15,6 +15,8 @@ import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardS
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardToolController
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardViewportController
 import java.io.File
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -33,7 +35,11 @@ import kotlin.time.Duration.Companion.milliseconds
 class BoardViewModel(
     private val repository: BoardRepository,
     private val thumbnailGenerator: BoardThumbnailer,
-    imageStore: ImageStore
+    imageStore: ImageStore,
+    // Дефолт Main.immediate сохраняет прежнее поведение: viewModelScope и так
+    // работает на Main. Тесты передают StandardTestDispatcher, чтобы управлять
+    // delay/дебаунсом виртуальным временем.
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
 ) : ViewModel() {
 
     private var currentBoardId: Long? = null
@@ -112,7 +118,7 @@ class BoardViewModel(
     // undo-стек и выделение, хотя пользователь просто вернулся на тот же boardId.
     fun openBoard(boardId: Long) {
         if (currentBoardId == boardId && !_isBoardLoadInProgress.value) return
-        viewModelScope.launch {
+        viewModelScope.launch(dispatcher) {
             _isBoardLoadInProgress.value = true
             val doc = repository.loadBoard(boardId)
             if (doc != null) {
@@ -149,7 +155,7 @@ class BoardViewModel(
         val imagesSnapshot = images.value
         val viewportSnapshot = viewportState.value
 
-        viewModelScope.launch {
+        viewModelScope.launch(dispatcher) {
             // NonCancellable: отмена scope (onCleared) не должна оборвать запись на середине —
             // файл и строка Room пишутся без общей транзакции, и половина хуже отсутствия.
             withContext(NonCancellable) {
@@ -177,7 +183,7 @@ class BoardViewModel(
         val boardId = currentBoardId ?: return
         hasUnsavedChanges = true
         autoSaveJob?.cancel()
-        autoSaveJob = viewModelScope.launch {
+        autoSaveJob = viewModelScope.launch(dispatcher) {
             delay(1_500L.milliseconds)
             val strokesSnapshot = strokes.value
             val imagesSnapshot = images.value

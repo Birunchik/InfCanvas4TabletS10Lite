@@ -60,16 +60,13 @@ app ──> feature:home ──> core:designsystem
 
 > **Про `core:domain`:** рекомендую Android-library (а не `kotlin("jvm")`), потому что порты картинок используют `Uri`/`File`. Запрет на Compose/Room сохраняется и проверяется автоматически. Если хочется 100% JVM-модуль — сделайте порты без `Uri` (`ImageSource`), это +1 день и лишний слой.
 
-## Фаза 2. `:core:data` (2–3 дня, риск средний)
+## Фаза 3. Порты и DI: убрать `presentation → data` (2 дня, риск средний)
 
-1. Модуль `core/data` (`com.android.library`): Room (+KSP), `exifinterface`, `kotlinx-coroutines`, `:core:domain`.
-2. Перенести `../core/data`, `../core/data`, `../core/data`. `ImageAssetStorage : ImageStore`, `ThumbnailGenerator : BoardThumbnailer`.
-3. **Разорвать `ThumbnailGenerator` ↔ presentation окончательно:** он должен зависеть только от `Brush.calculateWidth` (domain) и собственного рендера. В HEAD он ещё импортирует `presentation.canvas.calculateWidthForBrush` — фаза 0 это устраняет; проверить `grep`.
-4. Room: `exportSchema = true`, схемы в `core/data/schemas`, `room.schemaLocation` в KSP; DAO/entities остаются `internal` (или `public` только для `BoardRepositoryImpl`).
-5. Тесты (перенос + новые):
-   - `BoardFileStorageTest`: round-trip текущей версии, чтение v1/v2/v3/v4, битый magic, обрезанный файл, `strokeCount`/`pointCount` с мусором (проверка на OOM/`IllegalArgumentException`);
-   - `BoardRepositoryImplTest`: фейковый DAO + временная папка, порядок «файл → Room», `thumbnailPath = null` не затирает превью, удаление;
-   - `ThumbnailGeneratorTest` (Robolectric): пустая доска, штрихи, отсутствующий файл картинки, размер webp.
-6. `:app` подключает `:core:data` и биндит реализации в `AppContainer`.
+Это архитектурное ядро плана; делать **до** выноса фич, пока всё в одном модуле и легко проверять.
 
-**Критерий:** `core:data` не импортирует `presentation`/`feature`/`canvas`; data-тесты идут отдельной задачей; схема Room в git.
+1. `BoardViewModel`, `BoardViewModelFactory`, `BoardScreen`, `CanvasLayer`, `BoardImageController` принимают `ImageStore`/`BoardThumbnailer` вместо `ImageAssetStorage`/`ThumbnailGenerator`. `BoardImageCache` — `ImageStore` (или только `fileFor`-порт `ImageFiles`).
+2. `AppNavHost` больше не принимает storage: получает `AppContainer` (или готовые фабрики VM).
+3. `BoardViewModel` заодно становится тестируемым: добавить `CoroutineDispatcher`/`Thumbnailer` в конструктор, написать `BoardViewModelTest` на дебаунс 1.5 с, двойной `flush`, `openBoard`-guard, `NonCancellable`.
+4. Убрать `@VisibleForTesting`-костыли, где они были нужны из-за конкретных классов.
+
+**Критерий:** `grep -r "data.local.storage" app/src/main/java/com/infinitecanvas/board/presentation` пуст; тест `BoardViewModel` зелёный; поведение не изменилось (ручной смоук: рисование → сохранение → перезапуск → превью).

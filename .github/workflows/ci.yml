@@ -45,7 +45,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        # bash gradlew: не зависим от executable-бита, который теряется при коммите
+        # с Windows (core.filemode=false). Сам режим + LF чинятся в репозитории.
+        shell: bash
+        run: bash ./gradlew testDebugUnitTest --stacktrace
 
       - name: Upload test reports
         if: always()
@@ -73,7 +76,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Run Android lint
-        run: ./gradlew :app:lintDebug --stacktrace
+        shell: bash
+        run: bash ./gradlew :app:lintDebug --stacktrace
 
       - name: Upload lint report
         if: always()
@@ -113,7 +117,7 @@ jobs:
           arch: x86_64
           profile: pixel_tablet
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: bash ./gradlew :app:connectedDebugAndroidTest --stacktrace
 
       - name: Upload instrumented reports
         if: always()

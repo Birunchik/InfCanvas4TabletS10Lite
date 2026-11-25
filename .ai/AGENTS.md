@@ -92,6 +92,12 @@
 - **CI** — `.github/workflows/ci.yml`; границы модулей проверяются
   `scripts/check-module-boundaries.ps1` в job `boundaries`. Перед тем как ссылаться на CI,
   убедись, что прогон реально зелёный.
+- **`gradlew` должен быть `100755` в индексе git.** На Windows `core.filemode=false`, и
+  коммит может сбросить бит исполнения → в Linux CI `./gradlew: Permission denied (126)`.
+  Проверка: `git ls-files -s gradlew` (ждём `100755`); починка:
+  `git update-index --chmod=+x gradlew` и коммит. В `.gitattributes` закреплено `eol=lf`
+  для `gradlew`, чтобы CRLF не превращал shebang в `/bin/sh^M`.
+  Обходной путь в workflow — `bash ./gradlew`, но он не заменяет починку режима.
 
 ## Текущее состояние модуляризации
 

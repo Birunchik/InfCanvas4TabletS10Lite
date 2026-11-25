@@ -1,0 +1,16 @@
+# Нормализация переводов строк: bash-скрипты обязаны быть LF,
+# иначе в Linux CI получим "/bin/sh^M: bad interpreter".
+*.sh        text eol=lf
+gradlew     text eol=lf
+
+# Windows-скрипты — CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Бинарные артефакты: git не должен трогать их содержимое.
+*.jar       binary
+*.png       binary
+*.webp      binary
+*.jpg       binary
+*.jpeg      binary
+*.keystore  binary

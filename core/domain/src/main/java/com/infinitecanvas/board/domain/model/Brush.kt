@@ -2,7 +2,7 @@ package com.infinitecanvas.board.domain.model
 import com.infinitecanvas.board.domain.model.BrushDefaults.HIGHLIGHTER_WIDTH_MULTIPLIER
 
 // Порядок констант — часть бинарного формата: в BoardFileStorage пишется ordinal.
-// Добавлять типы только в конец; перестановка требует ++FORMAT_VERSION.
+// Добавлять типы только в конец: перестановка ломает чтение уже сохранённых досок.
 enum class BrushType {
     BALLPOINT,     // Ручка
     FOUNTAIN,      // Перо

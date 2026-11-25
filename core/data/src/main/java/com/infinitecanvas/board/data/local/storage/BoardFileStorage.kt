@@ -21,8 +21,8 @@ import kotlinx.coroutines.withContext
 /**
   Высокоскоростное бинарное хранилище геометрии досок и метаданных изображений.
  *
- * Формат: DataOutputStream (big-endian), порядок полей фиксирован. Любое изменение
- * раскладки требует ++FORMAT_VERSION и ветки чтения старых версий.
+ * Формат: DataOutputStream (big-endian), порядок полей фиксирован. Поддерживается
+ * только текущая версия раскладки — обратная совместимость удалена.
  */
 class BoardFileStorage(context: Context) {
 
@@ -89,7 +89,7 @@ class BoardFileStorage(context: Context) {
                 }
             }
 
-            // Изображения (добавлено в v2, флаг isPinned в v3)
+            // Изображения
             out.writeInt(images.size)
             for (i in images.indices) {
                 val img = images[i]
@@ -112,8 +112,8 @@ class BoardFileStorage(context: Context) {
         tempFile.renameTo(targetFile)
     }
 
-    // Неверный MAGIC или версия не бросают исключение, а дают пустую доску:
-    // приложение должно открыться даже при повреждённом хранилище.
+    // Неверный MAGIC или несовпадающая версия не бросают исключение, а дают пустую
+    // доску: приложение должно открыться даже при повреждённом хранилище.
     // Обрезанный файл так не обрабатывается — чтение упадёт с EOFException.
     suspend fun readBoardPayload(boardId: Long): StoredCanvasPayload = withContext(Dispatchers.IO) {
         val file = getBoardFile(boardId)
@@ -127,7 +127,7 @@ class BoardFileStorage(context: Context) {
                 return@withContext StoredCanvasPayload(emptyList(), emptyList(), ViewportState())
             }
             val version = input.readInt()
-            if (version !in 1..FORMAT_VERSION) {
+            if (version != FORMAT_VERSION) {
                 return@withContext StoredCanvasPayload(emptyList(), emptyList(), ViewportState())
             }
 
@@ -137,11 +137,11 @@ class BoardFileStorage(context: Context) {
                 scale = input.readDouble()
             )
 
-            // ordinal из файла может выйти за границы enum (файл новее): coerceIn
-            // предотвращает краш ценой подмены типа последним элементом.
+            // ordinal из файла может выйти за границы enum (повреждённый файл):
+            // coerceIn предотвращает краш ценой подмены типа последним элементом.
             val brushTypes = BrushType.entries
-            // coerceIn: файл мог быть повреждён или новее — без clamp ArrayList(huge)
-            // бросит OOM/IllegalCapacity до того, как EOFException поймает мусор.
+            // coerceIn: без clamp на мусорный счётчик ArrayList(huge) бросит
+            // OOM/IllegalCapacity до того, как EOFException поймает мусор.
             val strokeCount = input.readInt().coerceIn(0, MAX_STROKE_COUNT)
             val strokes = ArrayList<Stroke>(strokeCount)
 
@@ -152,25 +152,12 @@ class BoardFileStorage(context: Context) {
                 val baseSize = input.readFloat()
                 val opacity = input.readFloat()
 
-                // В v1..v3 ordinal 2 — PENCIL. Ветка нужна для совместимости: старые
-                // файлы читаются как полупрозрачный BALLPOINT, а не как текущий PENCIL.
-                // Коэффициент 0.45 подобран под прежний вид и зажат в 0.1..1.
-                // Миграция удалённого BrushType.PENCIL (индекс 2 в v1..v3) в полупрозрачный BALLPOINT
-                val brush = if (version < 4 && rawTypeOrdinal == 2) {
-                    Brush(
-                        type = BrushType.BALLPOINT,
-                        colorArgb = colorArgb,
-                        baseSize = baseSize,
-                        opacity = (opacity * 0.45f).coerceIn(0.1f, 1f)
-                    )
-                } else {
-                    Brush(
-                        type = brushTypes[rawTypeOrdinal.coerceIn(0, brushTypes.lastIndex)],
-                        colorArgb = colorArgb,
-                        baseSize = baseSize,
-                        opacity = opacity
-                    )
-                }
+                val brush = Brush(
+                    type = brushTypes[rawTypeOrdinal.coerceIn(0, brushTypes.lastIndex)],
+                    colorArgb = colorArgb,
+                    baseSize = baseSize,
+                    opacity = opacity
+                )
 
                 val bounds = WorldBounds(
                     minX = input.readDouble(),
@@ -181,15 +168,13 @@ class BoardFileStorage(context: Context) {
 
                 val pointCount = input.readInt().coerceIn(0, MAX_POINT_COUNT)
                 val points = ArrayList<StrokePoint>(pointCount)
-                // В v1..v3 timestamp не писался: 0 означает «нет данных». Потребители
-                // (рендер/превью) должны сами подставлять дефолтный dt, а не делить на 0.
                 for (j in 0 until pointCount) {
                     points.add(
                         StrokePoint(
                             x = input.readDouble(),
                             y = input.readDouble(),
                             pressure = input.readFloat(),
-                            timestampMs = if (version >= 4) input.readLong() else 0L
+                            timestampMs = input.readLong()
                         )
                     )
                 }
@@ -204,28 +189,23 @@ class BoardFileStorage(context: Context) {
                 )
             }
 
-            val images = if (version >= 2) {
-                val imageCount = input.readInt().coerceIn(0, MAX_IMAGE_COUNT)
-                ArrayList<BoardImage>(imageCount).apply {
-                    for (i in 0 until imageCount) {
-                        add(
-                            BoardImage(
-                                id = input.readLong(),
-                                fileName = input.readUTF(),
-                                bounds = WorldBounds(
-                                    minX = input.readDouble(),
-                                    minY = input.readDouble(),
-                                    maxX = input.readDouble(),
-                                    maxY = input.readDouble()
-                                ),
-                                zIndex = input.readInt(),
-                                isPinned = if (version >= 3) input.readBoolean() else false
-                            )
-                        )
-                    }
-                }
-            } else {
-                emptyList()
+            val imageCount = input.readInt().coerceIn(0, MAX_IMAGE_COUNT)
+            val images = ArrayList<BoardImage>(imageCount)
+            for (i in 0 until imageCount) {
+                images.add(
+                    BoardImage(
+                        id = input.readLong(),
+                        fileName = input.readUTF(),
+                        bounds = WorldBounds(
+                            minX = input.readDouble(),
+                            minY = input.readDouble(),
+                            maxX = input.readDouble(),
+                            maxY = input.readDouble()
+                        ),
+                        zIndex = input.readInt(),
+                        isPinned = input.readBoolean()
+                    )
+                )
             }
 
             StoredCanvasPayload(strokes = strokes, images = images, viewport = viewport)
@@ -237,11 +217,11 @@ class BoardFileStorage(context: Context) {
         getThumbnailFile(boardId).delete()
     }
 
-    // MAGIC — "ICB1" в big-endian. FORMAT_VERSION увеличивается при смене
-    // раскладки; чтение поддерживает 1..текущую.
+    // MAGIC — "ICB1" в big-endian. FORMAT_VERSION — единственная поддерживаемая
+    // раскладка; файлы с другим номером версии читаются как пустая доска.
     private companion object {
         const val MAGIC_HEADER = 0x49434231 // "ICB1"
-        const val FORMAT_VERSION = 4
+        const val FORMAT_VERSION = 1
 
         // Верхние границы для счётчиков из файла. Реальные доски далеко ниже,
         // но и мусор из повреждённого файла не должен приводить к OOM.

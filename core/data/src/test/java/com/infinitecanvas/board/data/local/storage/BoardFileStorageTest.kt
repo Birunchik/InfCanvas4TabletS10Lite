@@ -6,8 +6,6 @@ import com.google.common.truth.Truth.assertThat
 import com.infinitecanvas.board.data.testing.testImage
 import com.infinitecanvas.board.data.testing.testStroke
 import com.infinitecanvas.board.data.testing.testViewport
-import com.infinitecanvas.board.domain.model.BrushType
-import com.infinitecanvas.board.domain.model.ViewportState
 import java.io.DataOutputStream
 import java.io.EOFException
 import java.io.FileOutputStream
@@ -34,7 +32,7 @@ class BoardFileStorageTest {
     }
 
     @Test
-    fun `round-trip current version preserves all fields`() = runTest {
+    fun `round-trip preserves all fields`() = runTest {
         val strokes = listOf(
             testStroke(id = 7L),
             testStroke(id = 8L, brush = testStroke().brush.copy(opacity = 0.42f))
@@ -51,6 +49,7 @@ class BoardFileStorageTest {
         assertThat(payload.viewport).isEqualTo(viewport)
         assertThat(payload.strokes).hasSize(2)
         assertThat(payload.strokes[0].id).isEqualTo(7L)
+        assertThat(payload.strokes[0].points[1].timestampMs).isEqualTo(16L)
         assertThat(payload.strokes[1].brush.opacity).isEqualTo(0.42f)
         assertThat(payload.images).hasSize(2)
         assertThat(payload.images[1].isPinned).isTrue()
@@ -58,54 +57,23 @@ class BoardFileStorageTest {
     }
 
     @Test
-    fun `read v1 file without images and without timestamps`() = runTest {
-        writeV1(emptyList(), viewport = testViewport())
+    fun `unsupported version returns empty payload`() = runTest {
+        // Поддерживается только текущая раскладка; любой другой номер версии
+        // (в том числе прежняя v4) читается как пустая доска.
+        writeHeader(version = 2)
         val payload = storage.readBoardPayload(boardId)
 
-        assertThat(payload.images).isEmpty()
         assertThat(payload.strokes).isEmpty()
-        assertThat(payload.viewport.scale).isEqualTo(2.0)
+        assertThat(payload.images).isEmpty()
     }
 
     @Test
-    fun `read v1 stroke gets zero timestamp`() = runTest {
-        writeV1(strokes = listOf(1L to 3), viewport = testViewport())
+    fun `previously written v4 file is now rejected`() = runTest {
+        writeHeader(version = 4)
         val payload = storage.readBoardPayload(boardId)
 
-        assertThat(payload.strokes).hasSize(1)
-        assertThat(payload.strokes[0].points).hasSize(3)
-        assertThat(payload.strokes[0].points.all { it.timestampMs == 0L }).isTrue()
-    }
-
-    @Test
-    fun `read v2 file has images without isPinned`() = runTest {
-        writeV2(strokes = emptyList(), images = listOf("img.webp"), viewport = testViewport())
-        val payload = storage.readBoardPayload(boardId)
-
-        assertThat(payload.images).hasSize(1)
-        assertThat(payload.images[0].fileName).isEqualTo("img.webp")
-        assertThat(payload.images[0].isPinned).isFalse()
-    }
-
-    @Test
-    fun `read v3 file honors isPinned`() = runTest {
-        writeV3(strokes = emptyList(), images = listOf("pinned.webp" to true), viewport = testViewport())
-        val payload = storage.readBoardPayload(boardId)
-
-        assertThat(payload.images).hasSize(1)
-        assertThat(payload.images[0].isPinned).isTrue()
-    }
-
-    @Test
-    fun `v3 pencil ordinal migrates to translucent ballpoint`() = runTest {
-        // ordinal 2 в v1..v3 = удалённый PENCIL; должен читаться как BALLPOINT
-        // с opacity * 0.45, зажатой в 0.1..1.
-        writeV3(strokes = listOf(1L to 2), images = emptyList(), viewport = testViewport())
-        val payload = storage.readBoardPayload(boardId)
-
-        val brush = payload.strokes.single().brush
-        assertThat(brush.type).isEqualTo(BrushType.BALLPOINT)
-        assertThat(brush.opacity).isWithin(0.01f).of(0.45f)
+        assertThat(payload.strokes).isEmpty()
+        assertThat(payload.images).isEmpty()
     }
 
     @Test
@@ -113,7 +81,7 @@ class BoardFileStorageTest {
         val file = storage.getBoardFile(boardId).apply { parentFile?.mkdirs() }
         DataOutputStream(FileOutputStream(file)).use {
             it.writeInt(0xDEADBEEF.toInt()) // не "ICB1"
-            it.writeInt(4)
+            it.writeInt(1)
             it.writeDouble(0.0)
         }
 
@@ -127,7 +95,7 @@ class BoardFileStorageTest {
         val file = storage.getBoardFile(boardId).apply { parentFile?.mkdirs() }
         DataOutputStream(FileOutputStream(file)).use {
             it.writeInt(0x49434231) // "ICB1"
-            it.writeInt(4)
+            it.writeInt(1)
             it.writeDouble(1.0)
             it.writeDouble(2.0)
             // scale: double — обрывается здесь
@@ -143,7 +111,7 @@ class BoardFileStorageTest {
         val file = storage.getBoardFile(boardId).apply { parentFile?.mkdirs() }
         DataOutputStream(FileOutputStream(file)).use {
             it.writeInt(0x49434231)
-            it.writeInt(4)
+            it.writeInt(1)
             it.writeDouble(0.0); it.writeDouble(0.0); it.writeDouble(1.0)
             it.writeInt(Int.MAX_VALUE) // мусор
             // тело штрихов отсутствует — после coerce должен упереться в EOF, не в OOM
@@ -182,72 +150,16 @@ class BoardFileStorageTest {
         assertThat(thumb.exists()).isFalse()
     }
 
-    // ── Ручные писатели старых версий ────────────────────────────────
+    // ── Хелпер: пишет валидный заголовок с заданным номером версии ─────────
 
-    private fun writeV1(
-        strokes: List<Pair<Long, Int>> = emptyList(),
-        viewport: ViewportState
-    ) = writeLegacy(version = 1, strokes = strokes, images = emptyList(), viewport = viewport)
-
-    private fun writeV2(
-        strokes: List<Long> = emptyList(),
-        images: List<String> = emptyList(),
-        viewport: ViewportState
-    ) = writeLegacy(
-        version = 2,
-        strokes = strokes.map { it to BrushType.BALLPOINT.ordinal },
-        images = images.map { it to false },
-        viewport = viewport
-    )
-
-    private fun writeV3(
-        strokes: List<Pair<Long, Int>> = emptyList(),
-        images: List<Pair<String, Boolean>> = emptyList(),
-        viewport: ViewportState
-    ) = writeLegacy(version = 3, strokes = strokes, images = images, viewport = viewport)
-
-    private fun writeLegacy(
-        version: Int,
-        strokes: List<Pair<Long, Int>>,       // id для пустого штриха; id to ordinal — если нужен кастом
-        images: List<Pair<String, Boolean>>,
-        viewport: ViewportState,
-        pointsPerStroke: Int = 3
-    ) {
+    private fun writeHeader(version: Int) {
         val file = storage.getBoardFile(boardId).apply { parentFile?.mkdirs() }
         DataOutputStream(FileOutputStream(file)).use { out ->
-            out.writeInt(0x49434231)
+            out.writeInt(0x49434231) // "ICB1"
             out.writeInt(version)
-            out.writeDouble(viewport.offsetX)
-            out.writeDouble(viewport.offsetY)
-            out.writeDouble(viewport.scale)
-
-            out.writeInt(strokes.size)
-            for ((id, ordinal) in strokes) {
-                out.writeLong(id)
-                out.writeInt(ordinal)
-                out.writeInt(0xFF000000.toInt())
-                out.writeFloat(4f)
-                out.writeFloat(1f)
-                out.writeDouble(0.0); out.writeDouble(0.0)
-                out.writeDouble(10.0); out.writeDouble(10.0)
-                out.writeInt(pointsPerStroke)
-                repeat(pointsPerStroke) {
-                    out.writeDouble(1.0); out.writeDouble(2.0); out.writeFloat(0.5f)
-                    // v1..v3: timestampMs отсутствует
-                }
-            }
-
-            if (version >= 2) {
-                out.writeInt(images.size)
-                for ((name, pinned) in images) {
-                    out.writeLong(name.hashCode().toLong())
-                    out.writeUTF(name)
-                    out.writeDouble(0.0); out.writeDouble(0.0)
-                    out.writeDouble(100.0); out.writeDouble(100.0)
-                    out.writeInt(0)
-                    if (version >= 3) out.writeBoolean(pinned)
-                }
-            }
+            out.writeDouble(0.0); out.writeDouble(0.0); out.writeDouble(1.0) // viewport
+            out.writeInt(0) // strokes
+            out.writeInt(0) // images
         }
     }
 }

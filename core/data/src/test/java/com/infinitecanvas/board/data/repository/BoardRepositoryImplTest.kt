@@ -13,6 +13,7 @@ import com.infinitecanvas.board.data.testing.testViewport
 import com.infinitecanvas.board.domain.port.ImageStore
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -152,5 +153,73 @@ class BoardRepositoryImplTest {
     @Test
     fun `getSuggestedBoardTitle starts at one for empty`() = runTest {
         assertThat(repo.getSuggestedBoardTitle("Доска")).isEqualTo("Доска 1")
+    }
+
+    @Test
+    fun `observeFolders maps entities to domain`() = runTest {
+        val id = repo.createFolder("Work", colorArgb = 0xFF00FF00.toInt())
+
+        val folders = repo.observeFolders().first()
+        val folder = folders.first { it.id == id }
+
+        assertThat(folder.name).isEqualTo("Work")
+        assertThat(folder.colorArgb).isEqualTo(0xFF00FF00.toInt())
+    }
+
+    @Test
+    fun `observeAllBoards maps entities to domain summaries`() = runTest {
+        val id = repo.createBoard("Board")
+
+        val boards = repo.observeAllBoards().first()
+        val summary = boards.first { it.id == id }
+
+        assertThat(summary.title).isEqualTo("Board")
+        assertThat(summary.strokesCount).isEqualTo(0)
+        assertThat(summary.folderId).isNull()
+    }
+
+    @Test
+    fun `observeUnassignedBoards returns only boards without folder`() = runTest {
+        val folderId = repo.createFolder("F")
+        val freeId = repo.createBoard("free")
+        val assignedId = repo.createBoard("assigned", folderId = folderId)
+
+        val ids = repo.observeUnassignedBoards().first().map { it.id }
+
+        assertThat(ids).containsExactly(freeId)
+        assertThat(ids).doesNotContain(assignedId)
+    }
+
+    @Test
+    fun `loadBoard tolerates missing payload file`() = runTest {
+        val id = repo.createBoard("b")
+        assertThat(fileStorage.getBoardFile(id).delete()).isTrue()
+
+        val doc = repo.loadBoard(id)
+
+        assertThat(doc).isNotNull()
+        assertThat(doc!!.strokes).isEmpty()
+        assertThat(doc.images).isEmpty()
+    }
+
+    @Test
+    fun `renameBoard trims title`() = runTest {
+        val id = repo.createBoard("x")
+
+        repo.renameBoard(id, "  New Name  ")
+
+        assertThat(dao.getBoardById(id)!!.title).isEqualTo("New Name")
+    }
+
+    @Test
+    fun `moveBoardToFolder moves and clears`() = runTest {
+        val folderId = repo.createFolder("F")
+        val id = repo.createBoard("b", folderId = null)
+
+        repo.moveBoardToFolder(id, folderId)
+        assertThat(dao.getBoardById(id)!!.folderId).isEqualTo(folderId)
+
+        repo.moveBoardToFolder(id, null)
+        assertThat(dao.getBoardById(id)!!.folderId).isNull()
     }
 }

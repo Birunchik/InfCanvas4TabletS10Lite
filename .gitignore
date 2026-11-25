@@ -15,3 +15,9 @@
 local.properties
 .idea/
 **/.idea/
+# Локальные каталоги Gradle/Android, если агенты изолируют их внутри workspace (см. .ai/AGENTS.md)
+/build/.gradle-home
+/build/.android-home
+# Obsidian: служебные данные рабочей области не версионируем
+docs/.obsidian/workspace.json
+docs/.obsidian/workspace-mobile.json

@@ -2,68 +2,124 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [master]
   pull_request:
   schedule:
     - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
 
 jobs:
-  unit:
+  boundaries:
+    name: Module boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check module boundaries
+        # Ubuntu: в образе уже есть PowerShell 7 (pwsh). На windows-latest по умолчанию
+        # был бы Windows PowerShell 5.1 — пишем кроссплатформенно, без 5.1-специфики.
+        shell: pwsh
+        run: ./scripts/check-module-boundaries.ps1
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: boundaries
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
-      - if: always()
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report
-          path: app/build/reports/tests/
+          name: unit-test-reports
+          path: |
+            app/build/reports/tests/
+            core/*/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
 
-  instrumented:
-    if: github.event_name == 'schedule'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-      - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:connectedDebugAndroidTest --stacktracename: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-  schedule:
-    - cron: '0 3 * * *'
-
-jobs:
-  unit:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    needs: boundaries
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
-      - if: always()
+
+      - name: Run Android lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Upload lint report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report
-          path: app/build/reports/tests/
+          name: lint-reports
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 7
 
   instrumented:
-    if: github.event_name == 'schedule'
-    runs-on: macos-latest
+    name: Instrumented tests (nightly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: boundaries
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_tablet
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+
+      - name: Upload instrumented reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-reports
+          path: app/build/reports/androidTests/
+          if-no-files-found: ignore
+          retention-days: 7

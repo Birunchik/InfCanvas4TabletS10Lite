@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
  * Контур активного лассо в world-space. Вызывать внутри withTransform.
  * Толщина и dash нормализуются по масштабу, чтобы выглядеть константно на экране.
  */
-fun DrawScope.drawLassoPreview(
+internal fun DrawScope.drawLassoPreview(
     lassoWorldPath: Path,
     currentScaleFloat: Float,
     worldDashEffect: PathEffect

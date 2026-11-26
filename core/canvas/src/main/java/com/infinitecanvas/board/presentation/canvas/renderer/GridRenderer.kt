@@ -10,7 +10,7 @@ import kotlin.math.round
 
 // Все линии собираются в два Path и рисуются двумя drawPath: drawLine на каждую — лишние
 // вызовы канвы. Координаты screen-space, поэтому толщина линий не зависит от масштаба.
-fun DrawScope.drawBatchedWorldGrid(
+internal fun DrawScope.drawBatchedWorldGrid(
     viewportState: ViewportState,
     worldLeft: Double,
     worldTop: Double,

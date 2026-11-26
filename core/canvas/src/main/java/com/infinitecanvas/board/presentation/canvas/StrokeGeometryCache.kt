@@ -19,13 +19,13 @@ import kotlin.math.sqrt
 private const val MAX_GEOMETRY_CACHE_ENTRIES = 1500
 private const val MAX_POOLED_BUFFER_CAPACITY = 2048
 
-class VariableStrokeSegment(
+internal class VariableStrokeSegment(
     val path: Path,
     val width: Float,
     val bounds: WorldBounds
 )
 
-class CachedStrokeGeometry(
+internal class CachedStrokeGeometry(
     val bounds: WorldBounds,
     val path: Path,
     val color: Color,
@@ -87,7 +87,7 @@ private val threadLocalScratchBuffers = ThreadLocal.withInitial { GeometryScratc
  * bounds меняются при драге и undo, и запись с несовпавшими bounds обязана пересобраться,
  * иначе на экране остался бы старый путь.
  */
-class StrokeGeometryCache {
+internal class StrokeGeometryCache {
     private val cache = object : LinkedHashMap<Long, CachedStrokeGeometry>(256, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedStrokeGeometry>?): Boolean {
             return size > MAX_GEOMETRY_CACHE_ENTRIES
@@ -172,7 +172,7 @@ class StrokeGeometryCache {
 
 // Путь не создаём внутри: активный штрих переиспользует renderState.activePath,
 // поэтому функция обязана начинать с reset и целиком перезаписывать targetPath.
-fun buildGeometry(
+internal fun buildGeometry(
     stroke: Stroke,
     targetPath: Path
 ): CachedStrokeGeometry {

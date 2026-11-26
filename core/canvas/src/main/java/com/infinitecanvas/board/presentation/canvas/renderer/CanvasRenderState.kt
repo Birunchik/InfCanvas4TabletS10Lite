@@ -13,7 +13,7 @@ import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
  * Держит все аллоцируемые на кадр объекты и состояние инвалидации,
  * которое Canvas читает, чтобы перерисоваться при мутации gesture handler.
  */
-class CanvasRenderState {
+internal class CanvasRenderState {
     val pathCache = StrokeGeometryCache()
     val activeStrokeCache = ActiveStrokeCache()
 
@@ -58,7 +58,7 @@ class CanvasRenderState {
 }
 
 @Composable
-fun rememberCanvasRenderState(): CanvasRenderState =
+internal fun rememberCanvasRenderState(): CanvasRenderState =
     remember { CanvasRenderState() }
 internal fun computeWorldDashIntervals(scale: Float): FloatArray =
     floatArrayOf(14f / scale, 10f / scale)

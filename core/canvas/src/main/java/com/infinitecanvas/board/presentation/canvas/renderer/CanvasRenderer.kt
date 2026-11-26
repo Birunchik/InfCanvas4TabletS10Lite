@@ -31,7 +31,7 @@ private val forwardChiselMatrix = Matrix().apply {
     postRotate(HIGHLIGHTER_CHISEL_ANGLE_DEG)
 }
 
-fun applyChiselForwardTransform(path: Path) {
+internal fun applyChiselForwardTransform(path: Path) {
     path.asAndroidPath().transform(forwardChiselMatrix)
 }
 
@@ -45,7 +45,7 @@ private fun getStroke(width: Float): Stroke {
     }
 }
 
-fun DrawScope.drawCachedGeometry(
+internal fun DrawScope.drawCachedGeometry(
     geom: CachedStrokeGeometry,
     visibleWorldBounds: WorldBounds? = null
 ) {

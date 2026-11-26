@@ -59,6 +59,7 @@ dependencies {
     implementation(project(":core:domain"))
     implementation(project(":core:data"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:canvas"))
 
     implementation(libs.androidx.compose.runtime)
     implementation(libs.kotlinx.collections.immutable)

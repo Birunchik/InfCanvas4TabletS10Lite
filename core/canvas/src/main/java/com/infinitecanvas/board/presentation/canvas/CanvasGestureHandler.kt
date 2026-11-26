@@ -27,7 +27,7 @@ import com.infinitecanvas.board.presentation.canvas.renderer.CanvasRenderState
  * Живёт в remember и не пересоздаётся между рекомпозициями, поэтому все зависимости —
  * лямбды-провайдеры: они читают актуальные значения, не перезапуская pointerInput.
  */
-class CanvasGestureHandler(
+internal class CanvasGestureHandler(
     private val renderState: CanvasRenderState,
     private val interactionState: CanvasInteractionState,
     private val viewportState: () -> ViewportState,

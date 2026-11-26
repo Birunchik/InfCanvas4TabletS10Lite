@@ -10,7 +10,7 @@ import com.infinitecanvas.board.presentation.canvas.buildGeometry
  * Кэш геометрии активного штриха: пересобираем path только при изменении
  * количества точек. Инвалидируется при count == 0.
  */
-class ActiveStrokeCache {
+internal class ActiveStrokeCache {
     // Ключ — только pointCount: точки мутируются в том же списке, и сравнение содержимого было бы O(n) на кадр.
     var pointCount: Int = -1
     var geometry: CachedStrokeGeometry? = null
@@ -25,7 +25,7 @@ class ActiveStrokeCache {
  * Отрисовка штриха, который сейчас рисуется пользователем (до коммита).
  * Вызывать внутри withTransform.
  */
-fun DrawScope.drawActiveStroke(
+internal fun DrawScope.drawActiveStroke(
     activePointCount: Int,
     createStroke: () -> Stroke,
     activePath: Path,

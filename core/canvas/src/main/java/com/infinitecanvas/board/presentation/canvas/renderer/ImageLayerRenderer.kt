@@ -17,7 +17,7 @@ import kotlin.math.roundToInt
  * Незакреплённые фотографии — часть «мира», рисуются под штрихами.
  * Координаты world-space; вызывать внутри withTransform.
  */
-fun DrawScope.drawUnpinnedImages(
+internal fun DrawScope.drawUnpinnedImages(
     images: List<BoardImage>,
     boardId: Long,
     imageCache: BoardImageCache,
@@ -76,7 +76,7 @@ fun DrawScope.drawUnpinnedImages(
  * Закреплённые (floating reference) фотографии — экранный слой поверх мира.
  * Координаты screen-space; вызывать вне withTransform.
  */
-fun DrawScope.drawPinnedImages(
+internal fun DrawScope.drawPinnedImages(
     images: List<BoardImage>,
     boardId: Long,
     imageCache: BoardImageCache,

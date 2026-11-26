@@ -14,7 +14,7 @@ import com.infinitecanvas.board.presentation.canvas.CanvasGestureHandler
 
 // Всё в screen-space и после withTransform: оверлеи не должны масштабироваться,
 // поэтому world→screen считаем вручную и не переиспользуем трансформ холста.
-fun DrawScope.drawScreenOverlays(
+internal fun DrawScope.drawScreenOverlays(
     viewportState: ViewportState,
     gestureHandler: CanvasGestureHandler,
     selectedImageId: Long?,

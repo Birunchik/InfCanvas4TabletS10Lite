@@ -13,7 +13,7 @@ import com.infinitecanvas.board.domain.model.StrokePoint
  * Инкапсулирует временное интерактивное состояние жестов (точки активного штриха,
  * точки лассо, путь лассо, смещение перетаскивания выделения).
  */
-class CanvasInteractionState {
+internal class CanvasInteractionState {
     val activePoints = mutableStateListOf<StrokePoint>()
     val lassoPoints = mutableStateListOf<StrokePoint>()
     val lassoWorldPath = Path()
@@ -33,5 +33,5 @@ class CanvasInteractionState {
 }
 
 @Composable
-fun rememberCanvasInteractionState(): CanvasInteractionState =
+internal fun rememberCanvasInteractionState(): CanvasInteractionState =
     remember { CanvasInteractionState() }

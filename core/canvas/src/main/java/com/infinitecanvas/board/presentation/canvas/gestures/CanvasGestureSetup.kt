@@ -21,7 +21,7 @@ import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
 import com.infinitecanvas.board.presentation.canvas.renderer.CanvasRenderState
 
 @Composable
-fun rememberCanvasGestureHandler(
+internal fun rememberCanvasGestureHandler(
     viewportState: ViewportState,
     activeTool: CanvasTool,
     activeBrush: Brush,
@@ -104,7 +104,7 @@ fun rememberCanvasGestureHandler(
  *
  * Сам `detectCanvasGestures` внутри дергает `handleViewportPanZoom` и др. из `CanvasGestures.kt`.
  */
-fun Modifier.canvasGestures(
+internal fun Modifier.canvasGestures(
     gestureHandler: CanvasGestureHandler,
     pathCache: StrokeGeometryCache
 ): Modifier = this

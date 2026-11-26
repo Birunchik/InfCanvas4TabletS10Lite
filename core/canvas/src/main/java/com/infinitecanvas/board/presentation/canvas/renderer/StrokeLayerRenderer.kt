@@ -9,7 +9,7 @@ import com.infinitecanvas.board.presentation.canvas.StrokeGeometryCache
 
 // Два прохода, highlighters первыми: они полупрозрачные и должны лежать под остальными,
 // порядок задаёт тип кисти, а не id.
-fun DrawScope.drawStrokeLayers(
+internal fun DrawScope.drawStrokeLayers(
     visibleStrokes: List<Stroke>,
     selectedStrokeIds: Set<Long>,
     isDraggingNow: Boolean,

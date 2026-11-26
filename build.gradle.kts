@@ -5,4 +5,10 @@ plugins {
     alias(libs.plugins.kover) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.google.devtools.ksp) apply false
+    alias(libs.plugins.dependency.analysis)
+}
+
+// DAGP анализирует только проекты, к которым применён: без этого buildHealth пуст.
+subprojects {
+    apply(plugin = "com.autonomousapps.dependency-analysis")
 }

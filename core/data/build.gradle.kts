@@ -52,5 +52,4 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.bundles.unitTest)
-    testImplementation(libs.androidx.arch.core.testing)
 }

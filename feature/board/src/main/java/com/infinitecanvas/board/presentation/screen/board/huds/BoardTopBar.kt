@@ -185,7 +185,7 @@ private fun BrushSizeSlider(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Размер: ${currentSize.toInt()}px",
+            text = stringResource(R.string.brush_size_format, currentSize.toInt()),
             style = MaterialTheme.typography.labelSmall
         )
         Slider(

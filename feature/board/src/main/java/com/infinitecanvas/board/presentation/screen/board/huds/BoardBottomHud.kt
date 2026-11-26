@@ -105,7 +105,9 @@ internal fun BoardBottomHud(
                 ) {
                     Icon(
                         imageVector = if (isSelectedImagePinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = if (isSelectedImagePinned) "Открепить изображение" else "Закрепить поверх экрана",
+                        contentDescription = stringResource(
+                            if (isSelectedImagePinned) R.string.action_unpin_image else R.string.action_pin_image
+                        ),
                         tint = if (isSelectedImagePinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -168,7 +170,9 @@ internal fun BoardBottomHud(
             ) {
                 Icon(
                     imageVector = if (isZoomLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                    contentDescription = if (isZoomLocked) "Зум заблокирован" else "Зум разблокирован",
+                    contentDescription = stringResource(
+                        if (isZoomLocked) R.string.zoom_locked else R.string.zoom_unlocked
+                    ),
                     tint = if (isZoomLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp)
                 )

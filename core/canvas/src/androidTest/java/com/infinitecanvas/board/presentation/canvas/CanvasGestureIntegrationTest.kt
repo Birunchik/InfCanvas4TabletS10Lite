@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -124,6 +125,13 @@ class CanvasGestureIntegrationTest {
         )
     }
 
+    /** v2-правило может вернуть управление до появления Compose-дерева на холодном старте. */
+    private fun awaitCanvas() {
+        compose.waitUntil(timeoutMillis = 15_000) {
+            compose.onAllNodesWithTag("canvas").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     // ---------- pan / zoom ----------
 
     @Test
@@ -135,11 +143,13 @@ class CanvasGestureIntegrationTest {
             })
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             swipe(start = Offset(100f, 200f), end = Offset(300f, 200f), durationMillis = 200)
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("onTransform должен был сработать, events=${transforms.size}", transforms.isNotEmpty())
         assertTrue(
@@ -155,6 +165,7 @@ class CanvasGestureIntegrationTest {
             CanvasUnderTest(onTransform = { _, _, z, _, _ -> zooms += z })
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             val cx = centerX
@@ -167,6 +178,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("pinch должен дать zoom > 1, получено: $zooms", zooms.any { it > 1f })
     }
@@ -181,6 +193,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             pinch(
@@ -191,6 +204,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("zoomLocked → все zoom == 1f, получено: $zooms", zooms.all { it == 1f })
     }
@@ -211,6 +225,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             down(Offset(100f, 100f))
@@ -220,6 +235,7 @@ class CanvasGestureIntegrationTest {
             up()
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertEquals("1 commit на up", 1, strokes.size)
         assertTrue("committed stroke должен иметь >= 2 точек", strokes[0].points.size >= 2)
@@ -236,11 +252,13 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             swipe(start = Offset(100f, 100f), end = Offset(300f, 300f))
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue(
             "без allowFingerDrawing touch идёт в pan, не в рисование",
@@ -259,11 +277,13 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             swipe(start = Offset(100f, 100f), end = Offset(300f, 300f), durationMillis = 200)
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertEquals("allowFingerDrawing=true → 1 stroke", 1, strokes.size)
     }
@@ -289,6 +309,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             down(Offset(50f, 50f))
@@ -299,6 +320,7 @@ class CanvasGestureIntegrationTest {
             up()
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("LassoSelector должен был найти id=7", selections.any { 7L in it })
     }
@@ -316,6 +338,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             down(Offset(50f, 50f))
@@ -323,6 +346,7 @@ class CanvasGestureIntegrationTest {
             up()
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("должна быть очистка при старте", selections.isNotEmpty())
         assertEquals(
@@ -352,11 +376,13 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             click(Offset(100f, 100f))
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertTrue("onImageSelected должен содержать id=1", selectedIds.any { it == 1L })
     }
@@ -380,6 +406,7 @@ class CanvasGestureIntegrationTest {
             )
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         compose.onNodeWithTag("canvas").performTouchInput {
             down(Offset(100f, 100f))
@@ -388,6 +415,7 @@ class CanvasGestureIntegrationTest {
             up()
         }
         compose.waitForIdle()
+        awaitCanvas()
 
         assertEquals("ровно 1 commit на up", 1, updates.size)
         val (id, newBounds) = updates[0]

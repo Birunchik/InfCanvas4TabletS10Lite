@@ -1,6 +1,5 @@
 package com.infinitecanvas.board.presentation.canvas
 
-import android.content.Context
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,9 +12,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
@@ -25,6 +22,7 @@ import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import com.infinitecanvas.board.testing.BrushFixtures
+import com.infinitecanvas.board.testing.FakeImageStore
 import com.infinitecanvas.board.testing.StrokeRealFixtures
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,18 +62,16 @@ class CanvasGestureIntegrationTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private lateinit var storage: ImageAssetStorage
+    private val imageStore = FakeImageStore()
     private lateinit var imageCacheScope: CoroutineScope
     private lateinit var imageCache: BoardImageCache
     private val viewport = ViewportState()
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        storage = ImageAssetStorage(context)
         imageCacheScope = CoroutineScope(Dispatchers.Main)
         imageCache = BoardImageCache(
-            imageAssetStorage = storage,
+            imageStore = imageStore,
             scope = imageCacheScope,
             onImageLoaded = {},
         )

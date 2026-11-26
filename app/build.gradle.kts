@@ -87,10 +87,12 @@ dependencies {
 
     //unit test ──
     testImplementation(libs.bundles.unitTest)
+    testImplementation(project(":core:testing"))
     testImplementation(libs.androidx.arch.core.testing) // уже был — оставляем
 
     //instrumented test ──
     androidTestImplementation(libs.bundles.androidTest)
+    androidTestImplementation(project(":core:testing"))
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.junit.ktx)
     androidTestImplementation(libs.androidx.junit)

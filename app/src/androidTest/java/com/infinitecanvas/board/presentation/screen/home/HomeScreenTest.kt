@@ -9,7 +9,7 @@ import com.infinitecanvas.board.R
 import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.presentation.theme.ui.InfCanvasTheme
-import com.infinitecanvas.board.testing.HomeScreenFakeRepository
+import com.infinitecanvas.board.testing.FakeBoardRepository
 import org.junit.Rule
 import org.junit.Test
 
@@ -50,7 +50,7 @@ class HomeScreenTest {
 
     @Test
     fun emptyState_noBoardsAtAll_showsAllBoardsTitle() {
-        val repo = HomeScreenFakeRepository().apply {
+        val repo = FakeBoardRepository().apply {
             foldersFlow.value = emptyList()
             allBoardsFlow.value = emptyList()
         }
@@ -64,7 +64,7 @@ class HomeScreenTest {
 
     @Test
     fun emptyState_emptyCustomFolder_showsFolderTitle() {
-        val repo = HomeScreenFakeRepository().apply {
+        val repo = FakeBoardRepository().apply {
             foldersFlow.value = listOf(folder())
             // boardsByFolderFlow[7] по умолчанию = emptyList()
         }
@@ -79,7 +79,7 @@ class HomeScreenTest {
 
     @Test
     fun emptyState_searchWithNoMatches_showsSearchTitle() {
-        val repo = HomeScreenFakeRepository().apply {
+        val repo = FakeBoardRepository().apply {
             foldersFlow.value = emptyList()
             allBoardsFlow.value = listOf(board(1, "Alpha"))
         }

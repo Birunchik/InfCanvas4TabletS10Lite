@@ -1,6 +1,5 @@
 package com.infinitecanvas.board.presentation.canvas
 
-import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -11,9 +10,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.Brush
 import com.infinitecanvas.board.domain.model.BrushType
@@ -22,6 +19,7 @@ import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.ViewportState
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.domain.spatial.Quadtree
+import com.infinitecanvas.board.testing.FakeImageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -46,7 +44,7 @@ class InfiniteCanvasViewTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private lateinit var storage: ImageAssetStorage
+    private val imageStore = FakeImageStore()
     private lateinit var imageCacheScope: CoroutineScope
     private lateinit var imageCache: BoardImageCache
     private lateinit var quadtree: Quadtree
@@ -54,11 +52,9 @@ class InfiniteCanvasViewTest {
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        storage = ImageAssetStorage(context)
         imageCacheScope = CoroutineScope(Dispatchers.Main)
         imageCache = BoardImageCache(
-            imageAssetStorage = storage,
+            imageStore = imageStore,
             scope = imageCacheScope,
             onImageLoaded = {},
         )

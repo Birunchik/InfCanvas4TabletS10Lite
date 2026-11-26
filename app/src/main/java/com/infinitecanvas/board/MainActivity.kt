@@ -4,10 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
 import coil.Coil
 import com.infinitecanvas.board.di.AppContainer
 import com.infinitecanvas.board.presentation.navigation.AppNavHost
+import com.infinitecanvas.board.presentation.theme.ui.InfCanvasTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         // Зависимости передаются готовыми: контент setContent пересоздаётся при
         // рекомпозиции, а создавать Room/репозиторий внутри composable нельзя — дубликаты.
         setContent {
-            MaterialTheme {
+            InfCanvasTheme {
                 AppNavHost(
                     repository = container.repository,
                     thumbnailGenerator = container.thumbnailGenerator,

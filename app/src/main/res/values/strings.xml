@@ -1,6 +1,4 @@
 <resources>
-    <string name="app_name">InfCanPRN</string>
-
     <string name="brush_ballpoint">Ручка</string>
     <string name="brush_fountain">Перо</string>
     <string name="brush_highlighter">Выделитель</string>

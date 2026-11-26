@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.infinitecanvas.board.R
+import com.infinitecanvas.designsystem.R as DesignSystemR
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.presentation.screen.home.FolderFilter
 
@@ -49,7 +50,7 @@ internal fun FolderSidebarContent(
             .padding(horizontal = 12.dp, vertical = 16.dp)
     ) {
         Text(
-            text = stringResource(R.string.app_name),
+            text = stringResource(DesignSystemR.string.app_name),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )

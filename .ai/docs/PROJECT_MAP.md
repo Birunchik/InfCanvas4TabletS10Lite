@@ -10,7 +10,7 @@
 
 | Модуль | Тип | Что внутри | Публичный вход |
 |---|---|---|---|
-| `:app` | Android application | `MainActivity`, `di/AppContainer`, `presentation/navigation/AppNavHost`, манифест, иконки, backup/file_paths, smoke-тесты | `MainActivity` → `AppNavHost` |
+| `:app` | Android application | `MainActivity`, `AppContainer.kt`, `AppNavHost.kt`, манифест, иконки, backup/file_paths, smoke-тесты | `MainActivity` → `AppNavHost` |
 | `:core:domain` | Android library (без Compose/Room) | `model/`, `spatial/` (`Quadtree`, `LassoSelector`), `repository/` (`BoardRepository`), `port/` (`ImageStore`, `BoardThumbnailer`) | Kotlin-классы и интерфейсы |
 | `:core:data` | Android library (Room + files) | `local/db/` (Room), `local/storage/` (`BoardFileStorage`, `ImageAssetStorage`, `ThumbnailGenerator`), `repository/BoardRepositoryImpl` | реализации портов; создаются в `AppContainer` |
 | `:core:canvas` | Android library (Compose) | `InfiniteCanvasView`, `gestures/`, `renderer/`, `StrokeGeometryCache`, `BoardImageCache` | `InfiniteCanvasView`, `BoardImageCache`, `ImageDecoder`, `computeSelectionWorldBounds` |
@@ -58,7 +58,7 @@ test-only: modules ──> :core:testing ──> :core:domain
 | UI экрана / HUD | `feature/<screen>` | `feature/<screen>/src/androidTest` |
 | Тема, цвета, типографика | `core:designsystem` | — |
 | Фикстуры и фейки | `core:testing/src/main` | — |
-| Composition root | `app/.../di/AppContainer.kt` | — |
+| Composition root | `app/.../AppContainer.kt` | — |
 
 ## 4. Ключевые классы по подсистемам
 

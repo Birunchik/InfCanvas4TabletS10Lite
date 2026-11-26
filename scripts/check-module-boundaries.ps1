@@ -81,15 +81,15 @@ Check-NoImports -ModulePath 'feature/home' -Pattern '^import com\.infinitecanvas
 # 7. Test-фикстуры не тянут UI.
 Check-NoImports -ModulePath 'core/testing' -Pattern '^import com\.infinitecanvas\.(board\.presentation|board\.data|canvas|feature)\.' -Reason 'core:testing must stay independent of UI/data modules'
 
-# 8. В :app только AppContainer знает про core:data.
+# 8. В :app только composition root (AppContainer.kt) знает про core:data.
+# Проверяем по имени файла, а не по каталогу: composition root можно переносить.
 $appDataImports = @()
 foreach ($file in (Get-KotlinFiles -ModulePath 'app')) {
     $matches = Select-String -Path $file.FullName -Pattern '^import com\.infinitecanvas\.board\.data\.' -ErrorAction SilentlyContinue
     if ($matches) { $appDataImports += $file.FullName }
 }
-$allowedContainer = Join-Path $root 'app/src/main/java/com/infinitecanvas/board/di/AppContainer.kt'
 foreach ($path in $appDataImports) {
-    if ($path -ne $allowedContainer) {
+    if ([System.IO.Path]::GetFileName($path) -ne 'AppContainer.kt') {
         Add-Violation ("{0} imports core:data; only AppContainer.kt is allowed" -f $path)
     }
 }

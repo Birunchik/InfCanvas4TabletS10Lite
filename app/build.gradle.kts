@@ -5,7 +5,7 @@ plugins {
 }
 
 composeCompiler {
-    stabilityConfigurationFiles.add { file("stability_config.conf") }
+    stabilityConfigurationFiles.add { rootProject.file("gradle/stability_config.conf") }
 }
 
 android {

@@ -26,3 +26,8 @@ rootProject.name = "InfCanvas"
 include(":app")
 include(":core:domain")
 include(":core:data")
+include(":core:canvas")
+include(":core:designsystem")
+include(":core:testing")
+include(":feature:home")
+include(":feature:board")

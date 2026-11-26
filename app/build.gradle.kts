@@ -40,8 +40,6 @@ android {
     buildFeatures {
         compose = true
     }
-
-
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -49,58 +47,35 @@ android {
         animationsDisabled = true
     }
 }
+
 kover {
     reports {
         variant("debug")   { html { }; xml { } }
         variant("release") { html { }; xml { } }
     }
 }
+
+// :app — только composition root и навигация. Всё остальное живёт в модулях.
 dependencies {
     implementation(project(":core:domain"))
     implementation(project(":core:data"))
     implementation(project(":core:designsystem"))
-    implementation(project(":core:canvas"))
     implementation(project(":feature:board"))
     implementation(project(":feature:home"))
 
     implementation(libs.androidx.compose.runtime)
-    implementation(libs.kotlinx.collections.immutable)
-    // Базовые компоненты Android и архитектура
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.exifinterface)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-
-    // Пользовательский интерфейс и Material 3 (Jetpack Compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.androidx.foundation)
-
-    // Навигация и изображения
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
 
-    // Сетевые запросы
-    implementation(libs.volley)
-
-    //unit test ──
     testImplementation(libs.bundles.unitTest)
-    testImplementation(project(":core:testing"))
-    testImplementation(libs.androidx.arch.core.testing) // уже был — оставляем
 
-    //instrumented test ──
     androidTestImplementation(libs.bundles.androidTest)
-    androidTestImplementation(project(":core:testing"))
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.junit.ktx)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.compose.ui)
+    androidTestImplementation(libs.androidx.foundation)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.junit)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

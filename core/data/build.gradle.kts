@@ -1,28 +1,12 @@
 plugins {
-    alias(libs.plugins.android.library)
+    id("infcanvas.android.library")
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.kover)
 }
 
 android {
     namespace = "com.infinitecanvas.board.data"
-    compileSdk {
-        version = release(37) {
-            minorApiLevel = 1
-        }
-    }
-    defaultConfig {
-        minSdk = 31
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    testOptions {
-        unitTests {
-            isIncludeAndroidResources = true
-        }
-    }
+
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }

@@ -21,6 +21,8 @@
 
 `build-logic/` — included build с convention-плагинами `infcanvas.android.library`
 и `infcanvas.android.compose` (compileSdk 37.1, minSdk 31, Java 11, Compose, testOptions).
+Подключены во всех библиотечных модулях (`:core:*`, `:feature:*`); `:app` остаётся
+на application-плагине и задаёт свои buildType-настройки.
 
 ## 2. Граф зависимостей (фактический)
 

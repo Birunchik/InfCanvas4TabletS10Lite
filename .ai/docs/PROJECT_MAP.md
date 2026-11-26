@@ -10,48 +10,64 @@
 
 | Модуль | Тип | Что внутри | Публичный вход |
 |---|---|---|---|
-| `:app` | Android application | `MainActivity`, `di/AppContainer`, `presentation/**` (canvas, home, board, navigation, theme, ресурсы), `androidTest` | `MainActivity` → `AppNavHost` |
-| `:core:domain` | Android library (без Compose/Room) | `model/` (модели), `spatial/` (`Quadtree`, `LassoSelector`), `repository/` (`BoardRepository`), `port/` (`ImageStore`, `BoardThumbnailer`) | публичные Kotlin-классы и интерфейсы |
-| `:core:data` | Android library (Room + files) | `local/db/` (Room), `local/storage/` (`BoardFileStorage`, `ImageAssetStorage`, `ThumbnailGenerator`), `repository/BoardRepositoryImpl` | реализации портов; создаётся в `AppContainer` |
+| `:app` | Android application | `MainActivity`, `di/AppContainer`, `presentation/navigation/AppNavHost`, манифест, иконки, backup/file_paths, smoke-тесты | `MainActivity` → `AppNavHost` |
+| `:core:domain` | Android library (без Compose/Room) | `model/`, `spatial/` (`Quadtree`, `LassoSelector`), `repository/` (`BoardRepository`), `port/` (`ImageStore`, `BoardThumbnailer`) | Kotlin-классы и интерфейсы |
+| `:core:data` | Android library (Room + files) | `local/db/` (Room), `local/storage/` (`BoardFileStorage`, `ImageAssetStorage`, `ThumbnailGenerator`), `repository/BoardRepositoryImpl` | реализации портов; создаются в `AppContainer` |
+| `:core:canvas` | Android library (Compose) | `InfiniteCanvasView`, `gestures/`, `renderer/`, `StrokeGeometryCache`, `BoardImageCache` | `InfiniteCanvasView`, `BoardImageCache`, `ImageDecoder`, `computeSelectionWorldBounds` |
+| `:core:designsystem` | Android library (Compose) | `presentation/theme/ui/` (`Theme`, `Color`, `Type`), `colors.xml`, `themes.xml`, `app_name` | `InfCanvasTheme`, ресурсы темы |
+| `:core:testing` | Android library | `FakeBoardRepository`, `FakeImageStore`, `FakeBoardThumbnailer`, `MainDispatcherRule`, `FakeClock`, `*Fixtures` | тестовые фикстуры (только `testImplementation`/`androidTestImplementation`) |
+| `:feature:home` | Android library (Compose) | `HomeScreen`, `HomeViewModel`, `HomeRoute`, карточки, диалоги, sidebar, `strings.xml` | `HomeRoute` |
+| `:feature:board` | Android library (Compose) | `BoardScreen`, `BoardViewModel` + 4 контроллера, HUD, палитра, `strings.xml` | `BoardRoute` |
 
-Модулей `:core:canvas`, `:core:designsystem`, `:feature:*` **ещё нет** — это фазы 4–5
-плана (`docs/Modularization.md`).
+`build-logic/` — included build с convention-плагинами `infcanvas.android.library`
+и `infcanvas.android.compose` (compileSdk 37.1, minSdk 31, Java 11, Compose, testOptions).
 
 ## 2. Граф зависимостей (фактический)
 
 ```
-:app ──> :core:data ──api──> :core:domain
-  └───> :core:domain
+:app ──> :feature:home ──> :core:designsystem
+ │             └────────> :core:domain
+ ├──> :feature:board ──> :core:canvas ──> :core:domain
+ │             └────────> :core:domain
+ ├──> :core:data ───────> :core:domain
+ └──> :core:designsystem
+
+test-only: modules ──> :core:testing ──> :core:domain
 ```
 
-- В `:core:data` Room подключён через `api` (долг: должно быть `implementation`).
-- `:app` нужен `:core:data` только для `AppContainer`; androidTest используют
-  `ImageAssetStorage` напрямую намеренно.
+- `:app` нужен `:core:data` только для `AppContainer`; больше никто в data не ходит.
+- `:feature:*` не зависят от `:core:data` и друг от друга.
+- `:core:canvas` не зависит от data/экранов/фич.
+- В `:core:data` Room исторически подключён через `api` (долг: DAGP советует `implementation`).
 
-**Правило проверки:** `scripts/check-module-boundaries.ps1` (exit 1 при нарушении).
-Если добавляешь новый модуль — добавь его в скрипт и в §1–2.
+**Правило проверки:** `pwsh scripts/check-module-boundaries.ps1` (exit 1 при нарушении:
+запрещённые project-зависимости, импорты слоёв, чужие `R`, дубли namespace).
+Он же гоняется в CI job `boundaries`.
 
 ## 3. Куда класть код (решение по слоям)
 
 | Задача | Куда идти | Тест в … |
 |---|---|---|
 | Модель / геометрия / правило | `core:domain/.../model` или `/spatial` | `core:domain/src/test` (JVM, без Robolectric) |
-| Контракт доступа к данным | `core:domain/.../repository` (интерфейс) или `.../port` | фейки в `app/src/test/.../testing` |
+| Контракт доступа к данным | `core:domain/.../repository` (интерфейс) или `.../port` | фейки в `:core:testing` |
 | Хранение (БД, файлы, превью) | `core:data` | `core:data/src/test` (Robolectric) |
-| Состояние экрана (StateFlow, мутации) | `app/.../presentation/screen/<screen>/` (`*Controller`, `*ViewModel`) | `app/src/test` |
-| Отрисовка и жесты | `app/.../presentation/canvas/**` | `app/src/test` + `app/src/androidTest` |
-| Composition root / флаги | `app/.../di/AppContainer.kt` | — |
+| Отрисовка и жесты | `core:canvas/.../presentation/canvas/**` | `core:canvas/src/test` + `src/androidTest` |
+| Состояние экрана | `feature/<screen>/...` (`*Controller`, `*ViewModel`) | `feature/<screen>/src/test` |
+| UI экрана / HUD | `feature/<screen>` | `feature/<screen>/src/androidTest` |
+| Тема, цвета, типографика | `core:designsystem` | — |
+| Фикстуры и фейки | `core:testing/src/main` | — |
+| Composition root | `app/.../di/AppContainer.kt` | — |
 
 ## 4. Ключевые классы по подсистемам
 
 - **Данные:** `BoardRepositoryImpl` (порядок «файл → Room»), `BoardFileStorage`
   (бинарный формат), `ImageAssetStorage` (импорт, EXIF, downsample), `ThumbnailGenerator`.
 - **Домен:** `Stroke`/`WorldBounds` (инвариант `min <= max` держим сами), `Brush.calculateWidth`
-  (единый источник ширины — не дублировать), `Quadtree` (нот thread-safe, только Main).
+  (единый источник ширины — не дублировать), `Quadtree` (не thread-safe, только Main).
 - **Холст:** `InfiniteCanvasView` (один Canvas, порядок слоёв), `CanvasGestureHandler`
-  (приоритеты жестов важны), `CanvasRenderState` (буферы без аллокаций), `StrokeGeometryCache`.
-- **Экраны:** `BoardViewModel` + 4 контроллера (`Stroke`, `Image`, `Tool`, `Viewport`);
-  `HomeViewModel` (combine фолдеров, фильтра и поиска).
+  (приоритеты жестов важны; `internal`), `CanvasRenderState` (буферы без аллокаций),
+  `StrokeGeometryCache` (`internal`).
+- **Экраны:** `BoardRoute` → `BoardViewModel` + 4 контроллера; `HomeRoute` → `HomeViewModel`.
 
 ## 5. Формат доски (контракт)
 
@@ -66,15 +82,16 @@
 :: граф зависимостей модуля
 .\gradlew.bat :app:dependencies --configuration debugCompileClasspath
 :: проверка границ между модулями
-pwsh scripts/check-module-boundaries.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-module-boundaries.ps1
+:: анализ зависимостей (DAGP)
+.\gradlew.bat buildHealth
 :: список файлов и размер модуля
-git ls-files "core/**/*.kt" "app/src/**/*.kt"
+git ls-files "core/**/*.kt" "feature/**/*.kt" "app/src/**/*.kt"
 ```
 
 ## 7. Документы в `docs/`
 
-- `EXTENDING.md` — как добавлять фичи (кисти, инструменты, объекты), осторожно: после
-  массовой замены путей там могут быть неточные пути — сверяйся с деревом.
-- `Modularization.md` / `MODULARIZATION_PLAN.md` — план модуляризации (в первом есть
-  обрыв; фактическое состояние — §1–2 этого файла).
+- `EXTENDING.md` — как добавлять фичи (кисти, инструменты, объекты), пути соответствуют
+  модульной структуре (canvas → `core/canvas`, board → `feature/board`).
+- `MODULARIZATION_PLAN.md` — план и статус модуляризации.
 - `.ai/docs/TESTING.md` — стек тестов и команды запуска.

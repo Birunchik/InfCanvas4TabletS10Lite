@@ -4,24 +4,29 @@
 
 - JUnit 4.13, `kotlinx-coroutines-test` (`runTest`, `advanceTimeBy`/`advanceUntilIdle`),
   MockK (только для портов/фреймворковых классов), Truth (в `core:*`),
-  Robolectric 4.18 (`@Config(sdk = [31])`) для тестов, которым нужны `Context`/`Bitmap`,
-  Compose UI Test (только `:app` androidTest).
-- Покрытие: Kover подключён к `:app` и `:core:data` (в `:core:domain` — нет).
+  Robolectric 4.18 (`@Config(sdk = [31])` в `core:data`, `[34]` в `core:canvas`),
+  Compose UI Test (androidTest у `:core:canvas`, `:feature:home`, `:app`).
+- Покрытие: Kover подключён к `:app`, `:core:data`, `:core:canvas`, `:feature:board`,
+  `:feature:home` (в `:core:domain` — нет).
 - Robolectric требует `testOptions.unitTests.isIncludeAndroidResources = true`
-  (включено в `:app` и `:core:data`).
+  (включено convention-плагином для всех библиотек).
 
 ## Где лежат тесты
 
 | Модуль | Путь | Тип | Зависимости |
 |---|---|---|---|
-| `:core:domain` | `core/domain/src/test/java/.../domain/**` | JVM, без Robolectric | только JUnit |
+| `:core:domain` | `core/domain/src/test/java/.../domain/**` | JVM, без Robolectric | JUnit + Truth |
 | `:core:data` | `core/data/src/test/java/.../data/**` | JVM + **Robolectric** | `bundles.unitTest` |
-| `:app` | `app/src/test/java/...` | JVM, часть на Robolectric | `bundles.unitTest` |
-| `:app` | `app/src/androidTest/java/...` | устройство/эмулятор | `bundles.androidTest` + Compose UI Test |
+| `:core:canvas` | `core/canvas/src/test/java/.../canvas/**` | JVM + **Robolectric** | `bundles.unitTest` + `:core:testing` |
+| `:core:canvas` | `core/canvas/src/androidTest/java/.../canvas/**` | устройство/эмулятор | Compose UI Test + `:core:testing` |
+| `:feature:board` | `feature/board/src/test/java/.../board/**` | JVM | `bundles.unitTest` + `:core:testing` |
+| `:feature:home` | `feature/home/src/test/java/.../home/**` | JVM | `bundles.unitTest` + `:core:testing` |
+| `:feature:home` | `feature/home/src/androidTest/java/.../home/**` | устройство/эмулятор | Compose UI Test + `:core:testing` |
+| `:app` | `app/src/test`, `app/src/androidTest` | smoke | `bundles.unitTest` / Compose UI Test |
 
-Фикстуры: `core/data/src/test/.../data/testing/TestData.kt` (доменные объекты для data-тестов),
-`app/src/test/.../testing/` (`FakeBoardRepository`, `FakeImageStore`, `FakeBoardThumbnailer`,
-`MainDispatcherRule`, `FakeClock`, `*Fixtures`).
+Фикстуры: `core/testing/src/main/java/.../testing/` (`FakeBoardRepository`, `FakeImageStore`,
+`FakeBoardThumbnailer`, `MainDispatcherRule`, `FakeClock`, `*Fixtures`);
+`core/data/src/test/.../data/testing/TestData.kt` — доменные объекты для data-тестов.
 
 ## Команды
 
@@ -32,23 +37,29 @@
 :: конкретный модуль
 .\gradlew.bat :core:domain:testDebugUnitTest
 .\gradlew.bat :core:data:testDebugUnitTest
+.\gradlew.bat :core:canvas:testDebugUnitTest
+.\gradlew.bat :feature:board:testDebugUnitTest
+.\gradlew.bat :feature:home:testDebugUnitTest
 .\gradlew.bat :app:testDebugUnitTest
 
 :: конкретный класс/метод
 .\gradlew.bat :core:data:testDebugUnitTest --tests "*BoardFileStorageTest"
-.\gradlew.bat :app:testDebugUnitTest --tests "*BoardViewModelTest"
+.\gradlew.bat :feature:board:testDebugUnitTest --tests "*BoardViewModelTest"
 
-:: instrumented (нужен девайс/эмулятор)
-.\gradlew.bat :app:connectedDebugAndroidTest
+:: instrumented (нужен девайс/эмулятор; adb devices должен видеть устройство)
+.\gradlew.bat connectedDebugAndroidTest
+:: только один модуль
+.\gradlew.bat :core:canvas:connectedDebugAndroidTest
 
 :: отчёты
 :: app:      app/build/reports/tests/testDebugUnitTest/index.html
 :: core:*:   core/<module>/build/reports/tests/testDebugUnitTest/index.html
-:: androidTest: app/build/reports/androidTests/connected/debug/index.html
+:: feature:*:feature/<module>/build/reports/tests/testDebugUnitTest/index.html
+:: androidTest: <module>/build/reports/androidTests/connected/debug/index.html
 
 :: покрытие (там, где подключён Kover)
 .\gradlew.bat :app:koverHtmlReportDebug
-.\gradlew.bat :core:data:koverHtmlReportDebug
+.\gradlew.bat :core:canvas:koverHtmlReportDebug
 ```
 
 Перед прогоном убедись, что Gradle может писать в `~/.gradle/wrapper/dists`
@@ -68,10 +79,11 @@
 - **Домен (чистая логика)** → `StrokeTest`, `WorldBoundsTest`, `ViewportStateTest`,
   `QuadtreeTest`, `LassoSelectorTest`, `BrushCalculateWidthTest`. **Новые правила геометрии —
   сюда, без моков.**
-- **Состояние экрана** → `BoardViewModelTest` (дебаунс через виртуальное время,
-  двойной flush, NonCancellable), `HomeViewModelTest`.
-- **Жесты/холст** → unit (`app/src/test/.../canvas/**`) + instrumented
+- **Состояние экрана** → `feature:board` `BoardViewModelTest` (дебаунс через виртуальное время,
+  двойной flush, NonCancellable), `feature:home` `HomeViewModelTest`.
+- **Жесты/холст** → `core:canvas` unit (`src/test/.../canvas/**`) + instrumented
   (`CanvasGestureIntegrationTest`, `InfiniteCanvasViewTest`).
+- **Home UI** → `feature:home` instrumented `HomeScreenTest` (пустые состояния).
 
 ## Правила для новых тестов
 
@@ -79,4 +91,5 @@
 2. Не мокай `ViewportState`/`Stroke` — это чистые value-объекты, моки прячут поломку формул.
 3. Тест должен падать, если сломать поведение (сначала убедись, что он красный).
 4. Нет `Thread.sleep`; время — через `TestDispatcher`/`FakeClock`.
-5. Тесты, требующие `Uri`/`Bitmap`/`Context`, — только в `:core:data` и `:app` (Robolectric).
+5. Тесты, требующие `Uri`/`Bitmap`/`Context`, — только в `:core:data` и `:core:canvas` (Robolectric).
+6. Общие фикстуры — в `:core:testing`, не дублируй их в `test` и `androidTest`.

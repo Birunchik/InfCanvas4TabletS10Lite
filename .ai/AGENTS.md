@@ -55,9 +55,11 @@
 ## Жёсткие инварианты (нарушение = баг)
 
 1. `core:domain` не зависит от Android UI/фреймворков кроме `Uri`/`File` в портах.
-   Нельзя: Compose, Room, `presentation`, `data`.
-2. `core:data` не импортирует `presentation`. `presentation` не импортирует `core:data`,
-   только порты из `core:domain`. Единственное исключение — `:app`/`AppContainer`.
+   Нельзя: Compose, Room, `presentation`, `data`, `feature`.
+2. `core:data` не импортирует `presentation`/`feature`/`core:canvas`;
+   `core:canvas` не импортирует `core:data`/экраны/фичи; `feature:*` не импортируют
+   `core:data` и друг друга. Единственное место, где создаются реализации, — `:app`
+   (`AppContainer`). Граф проверяется `scripts/check-module-boundaries.ps1`.
 3. **Формат файла доски** (`core/data/.../BoardFileStorage.kt`). Сейчас
    `FORMAT_VERSION = 1`, и **обратная совместимость удалена** (см. KDoc файла): чтение
    старых версий больше не поддерживается. Поэтому:
@@ -69,29 +71,39 @@
      `id, brush.ordinal, color, baseSize, opacity, bounds, points`;
    - **Не добавляй тип в середину `BrushType`** — он станет другим `ordinal`'ом в уже
      сохранённых файлах.
-4. Пакеты `com.infinitecanvas.board.*` — публичный контракт между модулями. Публичные
-   сущности в `core:data` (DAO, `ImageAssetStorage`, `BoardFileStorage`) — деталь реализации,
-   которую видит только `AppContainer`.
-5. Производительность холста: в draw-фазе `InfiniteCanvasView`/`renderer/*` **нельзя
+4. Пакеты `com.infinitecanvas.board.*` — публичный контракт между модулями. **Namespace
+   модуля уникален** (совпадает с его `R`-классом): импортировать чужой `R` нельзя
+   (кроме `com.infinitecanvas.designsystem.R`). Публичные сущности в `core:data` (DAO,
+   `ImageAssetStorage`, `BoardFileStorage`) — деталь реализации, которую видит только
+   `AppContainer`.
+5. Публичный API `:core:canvas` — только `InfiniteCanvasView`, `BoardImageCache`,
+   `ImageDecoder`, `computeSelectionWorldBounds`; остальное `internal`. Входы фич —
+   `HomeRoute`/`BoardRoute`; ViewModel/контроллеры/HUD — детали модуля.
+6. Производительность холста: в draw-фазе `InfiniteCanvasView`/`renderer/*` **нельзя
    аллоцировать** (`Path`, `Rect`, `Offset`, списки) — переиспользуй `CanvasRenderState`.
 
 ## Известные ловушки
 
 - **Gradle wrapper lock** — см. правило про Gradle выше.
-- **`app/build.gradle.kts`: `composeCompiler { stabilityConfigurationFiles }`** — файл
-  `app/stability_config.conf`; при переносе Compose-кода в новый модуль эта конфигурация
-  (и сам файл) должны переехать вместе с ним.
+- **Convention-плагины** — `build-logic/` (included build). Библиотеки подключают
+  `id("infcanvas.android.library")` или `id("infcanvas.android.compose")` и задают только
+  `namespace`; compileSdk/minSdk/Java/testOptions уже там. Не дублируй их в модулях.
+- **Compose stability config** — `gradle/stability_config.conf`; модули Compose ссылаются
+  на него через `rootProject.file(...)`. При добавлении стабильного доменного класса
+  (передаётся в @Composable) дописывай его сюда.
 - **Тесты `:core:data`** — Robolectric `@Config(sdk = [31])`; `isIncludeAndroidResources = true`
   уже включён. `@GraphicsMode(NATIVE)` нужен только тестам с растром
   (`ThumbnailGeneratorTest`, `ImageAssetStorageTest`) — не копируй его механически.
 - **`:core:domain` тесты** — чистый JVM (JUnit + Truth), без Robolectric и MockK.
-- **`BoardViewModelTest`** управляет дебаунсом виртуальным временем: `StandardTestDispatcher`
-  + `advanceTimeBy`, а не `Unconfined`.
-- **`:app` androidTest используют `ImageAssetStorage` напрямую** (осознанно — тест гоняет
-  реальные файлы), поэтому у `:app` есть зависимость от `:core:data`.
+- **`BoardViewModelTest`** (в `:feature:board`) управляет дебаунсом виртуальным временем:
+  `StandardTestDispatcher` + `advanceTimeBy`, а не `Unconfined`.
+- **`:core:canvas` androidTest** используют `FakeImageStore` из `:core:testing`, а не
+  реальный `ImageAssetStorage` (иначе тест тянет `:core:data`).
+- **Фикстуры** — только `:core:testing`; не дублируй `BrushFixtures`/`StrokeRealFixtures`
+  между `test` и `androidTest`.
 - **CI** — `.github/workflows/ci.yml`; границы модулей проверяются
-  `scripts/check-module-boundaries.ps1` в job `boundaries`. Перед тем как ссылаться на CI,
-  убедись, что прогон реально зелёный.
+  `scripts/check-module-boundaries.ps1` в job `boundaries`, зависимости — `buildHealth`
+  в job `dependency-analysis`. Перед тем как ссылаться на CI, убедись, что прогон реально зелёный.
 - **`gradlew` должен быть `100755` в индексе git.** На Windows `core.filemode=false`, и
   коммит может сбросить бит исполнения → в Linux CI `./gradlew: Permission denied (126)`.
   Проверка: `git ls-files -s gradlew` (ждём `100755`); починка:
@@ -101,9 +113,9 @@
 
 ## Текущее состояние модуляризации
 
-Сделано: `:core:domain` (+ порты), `:core:data`, presentation переведён на порты,
-есть доменные/данные/ViewModel-тесты. Дальше — по плану `.ai/../docs/Modularization.md`
-и `docs/MODULARIZATION_PLAN.md` (осторожно: в `Modularization.md` есть обрыв после
-глобальной замены путей — сверяйся с фактическим деревом).
-Открытые долги: `api` вместо `implementation` в `core:data`, размер APK/время сборки —
-обновлять по факту.
+Фазы 0–5 плана выполнены: `:core:domain` (+ порты), `:core:data`, presentation переведён
+на порты, затем вынесены `:core:canvas`, `:core:designsystem`, `:feature:board`,
+`:feature:home`, фикстуры — в `:core:testing`, конфигурация — в `build-logic/`.
+`:app` — только `MainActivity` + `AppContainer` + `AppNavHost`.
+Открытые долги: `api` вместо `implementation` в `core:data` (DAGP-советы не фатальны),
+размер APK/время сборки — обновлять по факту.

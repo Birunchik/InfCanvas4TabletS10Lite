@@ -2,8 +2,18 @@
 
 Практическая карта точек расширения. Отвечает на вопрос «хочу добавить X — какие классы трогать и что не забыть», с указанием инвариантов, которые легко сломать.
 
-**Модули:** `app` (Compose-UI и состояние), `core/domain` (модели/порты/геометрия), `core/data` (Room + файловое хранилище)
+**Модули:** `app` (только MainActivity/AppContainer/AppNavHost), `core/domain` (модели/порты/геометрия), `core/data` (Room + файловое хранилище), `core/canvas` (холст, жесты, рендер), `core/designsystem` (тема), `feature/board`, `feature/home`, `core/testing` (фикстуры), `build-logic` (convention-плагины).
 **Стек:** Kotlin 2.4.21 · Compose · Room 2.8.5 · бинарный формат доски (единая версия, без обратной совместимости)
+
+> **Сокращения путей (после модуляризации).** Пути в документе даны от корня:
+> `presentation/canvas/**` → `core/canvas/src/main/java/com/infinitecanvas/board/presentation/canvas/**`;
+> `presentation/screen/board/**` → `feature/board/src/main/java/com/infinitecanvas/board/presentation/screen/board/**`;
+> `presentation/screen/home/**` → `feature/home/...`;
+> `presentation/theme/**` → `core/designsystem/...`;
+> `../core/domain` → `core/domain/src/main/java/com/infinitecanvas/board/domain`;
+> `../core/data` → `core/data/src/main/java/com/infinitecanvas/board/data`.
+> Строки: board — `feature/board/src/main/res/values/strings.xml`, home — `feature/home/...`,
+> общие (app_name) — `core/designsystem/...`.
 
 ---
 
@@ -25,9 +35,9 @@
 | 4 | `../core/domain` | `isStrokeHitByCircle`: полуширина для ластика |
 | 5 | `presentation/canvas/StrokeGeometryCache.kt` | `buildGeometry` (ветка), `Brush.calculateWidth` (множители) |
 | 6 | `presentation/canvas/renderer/CanvasRenderer.kt` | `drawCachedGeometry`: как рисовать (Stroke / Fill / свои слои) |
-| 7 | `presentation/screen/board/viewConrollers/BoardToolController.kt` | `selectBrushType`: opacity по умолчанию |
+| 7 | `presentation/screen/board/viewControllers/BoardToolController.kt` | `selectBrushType`: opacity по умолчанию |
 | 8 | `presentation/screen/board/huds/BoardTopBar.kt` | Чип в `BrushSelector` |
-| 9 | `app/src/main/res/values/strings.xml` | Подпись `brush_*` |
+| 9 | `feature/board/src/main/res/values/strings.xml` | Подпись `brush_*` |
 | 10 | `../core/data` | Как кисть выглядит на превью (если отличается) |
 
 **Не забыть:**
@@ -59,7 +69,7 @@
 1. **Модель** — `../core/domain`: новый data-класс + поле в `BoardDocument`/`BoardModels`.
 2. **Формат** — `../core/data`: новые поля в конец (порядок критичен; единая версия, без чтения старых). Для списка объектов — `writeInt(count)` перед циклом, как у `strokes`/`images`.
 3. **Репозиторий** — `../core/data` + интерфейс `../core/domain`: `loadBoard`/`saveBoardContent`.
-4. **Состояние** — новый `XxxController` в `presentation/screen/board/viewConrollers/` по образцу `BoardImageController` (StateFlow + мутации + `onContentChanged()`), зарегистрировать в `BoardViewModel` и проксировать методы.
+4. **Состояние** — новый `XxxController` в `presentation/screen/board/viewControllers/` по образцу `BoardImageController` (StateFlow + мутации + `onContentChanged()`), зарегистрировать в `BoardViewModel` и проксировать методы.
 5. **Отрисовка** — `presentation/canvas/renderer/`: отдельный слой; порядок — в `InfiniteCanvasView` (под штрихами / над штрихами / поверх мира).
 6. **Хит-тест и жесты** — `presentation/canvas/gestures/ImageGestureHandler.kt` как образец (углы, тело, приоритет в `detectCanvasGestures`).
 7. **Выделение** — взаимоисключение через `onSelectionActivated` (сейчас: штрихи ↔ картинки).
@@ -80,7 +90,7 @@
 - Ошибка чтения не должна превращаться в пустой холст: пустой `payload` → следующий автосейв затрёт доску.
 - Тест: round-trip текущей раскладки (записать → прочитать) + проверка, что неверный MAGIC/версия дают пустую доску.
 
-**Файлы:** `core/data` — `BoardFileStorage.kt` (формат), `BoardRepositoryImpl.kt` (порядок «файл → БД»), `app` — `BoardViewModel.kt` (кто и когда пишет).
+**Файлы:** `core/data` — `BoardFileStorage.kt` (формат), `BoardRepositoryImpl.kt` (порядок «файл → БД»), `feature:board` — `BoardViewModel.kt` (кто и когда пишет).
 
 ---
 
@@ -120,15 +130,15 @@
 - Новый фильтр — `HomeUiState.FolderFilter` (sealed) + ветка в `HomeViewModel.boardsFlow`.
 - Поиск — `HomeViewModel` (сейчас подстрока без нормализации регистра).
 - Превью — `BoardPreviewCard.kt`: ключ Coil обязан включать `updatedAt`, иначе картинка не обновится.
-- Диалоги — `components/HomeDialogs.kt`; состояние диалогов держится в `HomeScreen`, а не в ViewModel (это осознанно).
+- Диалоги — `feature/home/.../dialog/HomeDialogs.kt`; состояние диалогов держится в `HomeScreen`, а не в ViewModel (это осознанно).
 
 ---
 
 ## 8. Тема, цвета, локализация
 
-- Тема — `presentation/theme/ui/Theme.kt` (`InfCanvasTheme`), палитра — `Color.kt`, тексты — `Type.kt`.
-- Все новые строки — сразу в `res/values/strings.xml`; сейчас часть подписей захардкожена в HUD, не повторяй.
-- `app_name` в `strings.xml` сейчас — «Porno» (видно в лаунчере); при первом же релизе переименовать.
+- Тема — `core/designsystem/.../presentation/theme/ui/Theme.kt` (`InfCanvasTheme`), палитра — `Color.kt`, тексты — `Type.kt`. Применяется в `MainActivity`.
+- Все новые строки — сразу в `res/values/strings.xml` **своего модуля** (board/home/designsystem); захардкоженные подписи в HUD исправлены — не повторяй.
+- `app_name` — в `core/designsystem/src/main/res/values/strings.xml` (сейчас «InfCanPRN», виден в лаунчере).
 
 ---
 
@@ -184,5 +194,5 @@
 | Ссылка на файл удаляется раньше сохранения | `BoardImageController.deleteSelectedImage` | битая ссылка при краше |
 | Дублирование констант ширины | `Stroke`, `Quadtree`, `StrokeGeometryCache` | рассинхрон границ/ластика |
 | Абсолютный путь в модели/БД | `BoardSummary.thumbnailPath` | ломается при переносе/бэкапе |
-| Строки в коде | `BoardBottomHud`, `BoardTopBar` | нет локализации |
+| Строки в коде | было в `BoardBottomHud`, `BoardTopBar` — исправлено | нет локализации |
 | Рекомпозиция корня на каждое событие | `CanvasLayer` → `InfiniteCanvasView` | лишние 1.5–4 мс на кадр |

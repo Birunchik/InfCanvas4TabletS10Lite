@@ -15,6 +15,16 @@
 | `presentation/screen/home` | 16 | 1 464 | Compose, Coil |
 | `presentation/theme` | 3 | 98 | Compose |
 
+> **Статус на 2026-11-26: фазы 0–5 выполнены.**
+> Фактическая структура: `:app` (MainActivity + AppContainer + AppNavHost), `:core:domain`,
+> `:core:data`, `:core:canvas`, `:core:designsystem`, `:core:testing`, `:feature:home`,
+> `:feature:board`, `build-logic/` (convention-плагины). Границы проверяются
+> `scripts/check-module-boundaries.ps1` (deps + импорты + чужой `R` + уникальность namespace),
+> зависимости — `buildHealth` (DAGP 3.20.4), CI обновлён. Тесты перенесены в свои модули,
+> фикстуры — в `:core:testing`, `:app` сокращён до composition root.
+> Остаточные долги: DAGP-советы `api`/транзитивные зависимости не фатальны; `:app` всё ещё
+> держит `:core:data` (нужен только `AppContainer`); размер APK/время сборки — замерить.
+
 Связи, которые придётся разрезать (все — `presentation → data`, обратных нет):
 
 - `ImageAssetStorage`: `BoardImageCache`, `AppNavHost`, `BoardScreen`, `BoardViewModel`, `BoardViewModelFactory`, `CanvasLayer`, `BoardImageController` (7 файлов);
@@ -143,7 +153,7 @@ app ──> feature:home ──> core:designsystem
 2. **`:feature:board`**: `presentation/screen/board/**` → `feature/board`; вход — `@Composable fun BoardRoute(boardId, onBack, deps)`; VM-фабрика внутри модуля принимает порты. HUD/палитра — `internal`.
 3. **`:feature:home`**: `presentation/screen/home/**` → `feature/home`; вход — `HomeRoute(onOpenBoard)`. `HomeViewModel` зависит только от `BoardRepository`.
 4. **`:core:designsystem`**: `presentation/theme/**` + общие строки (`action_*`, `error_*`) и типографика. Строки разделить по владельцу: board-специфичные → `feature:board/res`, home-специфичные → `feature:home/res`, общие → designsystem. **Важно:** с `nonTransitiveRClass` (по умолчанию в AGP 9) `R` больше не общий — обновить импорты `com.infinitecanvas.board.R` → `...designsystem.R` / `...feature.board.R`; это самый шумный, но механический diff, делать отдельным коммитом.
-5. **`:app`**: `MainActivity` + `AppContainer` + `AppNavHost` (маршруты `home`, `board/{id}`) + `Application`/манифест/`app_name`. Цель — < 500 строк.
+5. **`:app`**: `MainActivity` + `AppContainer` + `AppNavHost` (маршруты `home`, `../feature/board`) + `Application`/манифест/`app_name`. Цель — < 500 строк.
 6. **`build-logic/`**: convention plugins `infcanvas.android.library`, `infcanvas.compose`, `infcanvas.feature`, `infcanvas.jvm`. В них: compileSdk/minSdk, Compose BOM, compiler stability config (`app/stability_config.conf` переезжает в convention), `testOptions` (Robolectric resources, animationsDisabled), тестовые зависимости.
 7. Тестовые фикстуры: вынести `app/src/test/.../testing` и `androidTest/.../testing` в один модуль `:core:testing` (`testFixtures` или отдельный `com.android.library` с `testImplementation`), чтобы убрать дубли `BrushFixtures`/`StrokeRealFixtures`.
 

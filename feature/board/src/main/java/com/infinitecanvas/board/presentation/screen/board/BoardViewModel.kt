@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 // Контроллеры — единственный источник состояния; ViewModel не держит копий
 // штрихов/картинок и лишь связывает их колбэками, поэтому flush читает их снапшоты.
-class BoardViewModel(
+internal class BoardViewModel(
     private val repository: BoardRepository,
     private val thumbnailGenerator: BoardThumbnailer,
     imageStore: ImageStore,

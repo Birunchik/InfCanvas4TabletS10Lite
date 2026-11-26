@@ -27,7 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.board.R
 
 @Composable
 internal fun ColorPickerSection(

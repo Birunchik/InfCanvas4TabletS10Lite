@@ -1,0 +1,31 @@
+<resources>
+    <string name="brush_ballpoint">Ручка</string>
+    <string name="brush_fountain">Перо</string>
+    <string name="brush_highlighter">Выделитель</string>
+    <string name="brush_pencil">Карандаш</string>
+    <string name="brush_marker">Маркер</string>
+
+    <string name="tool_eraser">Ластик</string>
+    <string name="tool_lasso">Лассо</string>
+
+    <string name="action_open_palette">Открыть палитру</string>
+    <string name="action_pin_color">Закрепить цвет</string>
+    <string name="action_delete_color">Удалить цвет</string>
+    <string name="color_slider_hue">Цвет</string>
+    <string name="color_slider_saturation">Насыщенность</string>
+    <string name="color_slider_value">Яркость</string>
+
+    <string name="action_undo">Отменить</string>
+    <string name="action_reset_zoom">100%</string>
+
+    <string name="action_copy_selected">Копировать выделенное</string>
+    <string name="action_paste_clipboard">Вставить</string>
+    <string name="action_delete_selected">Удалить выделенное</string>
+    <string name="action_clear_selection">Снять выделение</string>
+    <string name="action_back_to_boards">К списку досок</string>
+
+    <string name="action_insert_from_gallery">Фото из хранилища</string>
+    <string name="action_take_photo">Сделать фотографию</string>
+    <string name="action_delete_image">Удалить изображение</string>
+    <string name="camera_permission_denied">Для съёмки фото требуется разрешение на камеру</string>
+</resources>

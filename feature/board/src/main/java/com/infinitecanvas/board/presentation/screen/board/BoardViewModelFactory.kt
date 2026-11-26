@@ -6,7 +6,7 @@ import com.infinitecanvas.board.domain.port.BoardThumbnailer
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 
-class BoardViewModelFactory(
+internal class BoardViewModelFactory(
     private val repository: BoardRepository,
     private val thumbnailGenerator: BoardThumbnailer,
     private val imageStore: ImageStore

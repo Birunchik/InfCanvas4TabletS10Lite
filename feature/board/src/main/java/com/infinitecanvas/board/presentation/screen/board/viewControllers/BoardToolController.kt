@@ -11,7 +11,7 @@ import kotlin.math.round
 
 // onClearSelectionRequested при смене инструмента обязателен: иначе выделение
 // осталось бы активным и перехватывало бы жесты у лассо/ластика.
-class BoardToolController(
+internal class BoardToolController(
     private val onClearSelectionRequested: () -> Unit
 ) {
     private val _activeTool = MutableStateFlow(CanvasTool.BRUSH)

@@ -23,7 +23,7 @@ import com.infinitecanvas.board.presentation.screen.board.huds.CanvasLayer
 // Экран — «склейка» ViewModel и HUD: собственного состояния не хранит, поэтому
 // поворот экрана не сбрасывает инструмент и выделение.
 @Composable
-fun BoardScreen(
+internal fun BoardScreen(
     boardId: Long,
     viewModel: BoardViewModel,
     imageStore: ImageStore,

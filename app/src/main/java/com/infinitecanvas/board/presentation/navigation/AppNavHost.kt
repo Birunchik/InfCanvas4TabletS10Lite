@@ -10,9 +10,7 @@ import androidx.navigation.navArgument
 import com.infinitecanvas.board.domain.port.BoardThumbnailer
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
-import com.infinitecanvas.board.presentation.screen.board.BoardScreen
-import com.infinitecanvas.board.presentation.screen.board.BoardViewModel
-import com.infinitecanvas.board.presentation.screen.board.BoardViewModelFactory
+import com.infinitecanvas.board.presentation.screen.board.BoardRoute
 import com.infinitecanvas.board.presentation.screen.home.HomeScreen
 import com.infinitecanvas.board.presentation.screen.home.HomeViewModel
 import com.infinitecanvas.board.presentation.screen.home.HomeViewModelFactory
@@ -50,16 +48,10 @@ fun AppNavHost(
         ) { backStackEntry ->
             // Тип аргумента объявлен LongType выше: без явного типа Navigation отдал бы строку и getLong вернул бы 0
             val boardId = backStackEntry.arguments?.getLong("boardId") ?: return@composable
-            val boardViewModel: BoardViewModel = viewModel(
-                factory = BoardViewModelFactory(
-                    repository = repository,
-                    thumbnailGenerator = thumbnailGenerator,
-                    imageStore = imageStore
-                )
-            )
-            BoardScreen(
+            BoardRoute(
                 boardId = boardId,
-                viewModel = boardViewModel,
+                repository = repository,
+                thumbnailGenerator = thumbnailGenerator,
                 imageStore = imageStore,
                 onNavigateBack = {
                     navController.popBackStack()

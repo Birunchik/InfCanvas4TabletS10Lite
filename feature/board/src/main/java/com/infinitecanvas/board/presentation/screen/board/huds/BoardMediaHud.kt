@@ -31,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.board.R
 import java.io.File
 
 /**

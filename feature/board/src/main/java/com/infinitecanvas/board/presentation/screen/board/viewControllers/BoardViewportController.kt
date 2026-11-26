@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.update
 
 // Размер canvas живёт здесь, а не в ViewportState: он не сохраняется в доску,
 // но нужен конвертациям screen↔world для pinned-картинок.
-class BoardViewportController(
+internal class BoardViewportController(
     private val onViewportChanged: () -> Unit
 ) {
     var canvasWidthPx: Int = 1280

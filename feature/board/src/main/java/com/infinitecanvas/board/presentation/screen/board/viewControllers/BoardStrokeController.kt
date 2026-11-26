@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 
 // Штрихи — PersistentList: pushUndoSnapshot кладёт ссылку на старую версию, а не
 // копию, поэтому undo дешёвый и не может испортить текущий список.
-class BoardStrokeController(
+internal class BoardStrokeController(
     scope: CoroutineScope,
     private val onContentChanged: () -> Unit,
     private val onSelectionActivated: () -> Unit

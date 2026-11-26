@@ -20,7 +20,7 @@ import kotlin.math.min
 
 // Инвариант: bounds pinned-картинок — в screen-координатах, остальных — в world.
 // Любая работа с bounds обязана сначала смотреть на isPinned.
-class BoardImageController(
+internal class BoardImageController(
     private val imageStore: ImageStore,
     private val scope: CoroutineScope,
     private val viewportController: BoardViewportController,

@@ -1,6 +1,6 @@
 package com.infinitecanvas.board.presentation.screen.home
 
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 import com.infinitecanvas.board.domain.model.BoardSummary
 import com.infinitecanvas.board.domain.model.Folder
 import com.infinitecanvas.board.testing.FakeBoardRepository

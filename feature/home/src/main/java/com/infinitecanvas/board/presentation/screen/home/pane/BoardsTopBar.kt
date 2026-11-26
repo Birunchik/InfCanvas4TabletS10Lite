@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 
 /**
  * Верхняя панель экрана досок: заголовок фильтра и строка поиска в одну линию.

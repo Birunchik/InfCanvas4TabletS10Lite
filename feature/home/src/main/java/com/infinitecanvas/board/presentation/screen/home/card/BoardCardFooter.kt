@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 
 /**
  * Нижняя панель карточки доски: заголовок, «дата • папка», overflow-меню.

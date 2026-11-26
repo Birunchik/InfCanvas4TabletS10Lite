@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 import com.infinitecanvas.board.presentation.screen.home.pane.BoardsGridPane
 import com.infinitecanvas.board.presentation.screen.home.dialog.DeleteConfirmationDialog
 import com.infinitecanvas.board.presentation.screen.home.sidebar.FolderSidebarContent
@@ -34,7 +34,7 @@ import com.infinitecanvas.board.presentation.screen.home.dialog.TextInputDialog
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(
+internal fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenBoard: (Long) -> Unit
 ) {

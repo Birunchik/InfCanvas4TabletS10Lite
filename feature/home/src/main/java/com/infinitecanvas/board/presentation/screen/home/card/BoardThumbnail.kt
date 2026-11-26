@@ -19,7 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 import com.infinitecanvas.board.domain.model.BoardSummary
 import java.io.File
 

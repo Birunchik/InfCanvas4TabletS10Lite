@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.infinitecanvas.board.domain.repository.BoardRepository
 
-class HomeViewModelFactory(
+internal class HomeViewModelFactory(
     private val repository: BoardRepository
 ) : ViewModelProvider.Factory {
     // Фабрика нужна из-за конструктора с репозиторием: без неё viewModel() не создаст HomeViewModel рефлексией

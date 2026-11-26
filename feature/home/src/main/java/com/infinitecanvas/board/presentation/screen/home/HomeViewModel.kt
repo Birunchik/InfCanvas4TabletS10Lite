@@ -2,7 +2,7 @@ package com.infinitecanvas.board.presentation.screen.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.infinitecanvas.board.R
+import com.infinitecanvas.feature.home.R
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * а фильтр и поиск переживают пересоздание Activity.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class HomeViewModel(
+internal class HomeViewModel(
     private val repository: BoardRepository
 ) : ViewModel() {
 

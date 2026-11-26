@@ -1,7 +1,6 @@
 package com.infinitecanvas.board.presentation.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -11,9 +10,7 @@ import com.infinitecanvas.board.domain.port.BoardThumbnailer
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import com.infinitecanvas.board.presentation.screen.board.BoardRoute
-import com.infinitecanvas.board.presentation.screen.home.HomeScreen
-import com.infinitecanvas.board.presentation.screen.home.HomeViewModel
-import com.infinitecanvas.board.presentation.screen.home.HomeViewModelFactory
+import com.infinitecanvas.board.presentation.screen.home.HomeRoute
 
 @Composable
 fun AppNavHost(
@@ -28,11 +25,8 @@ fun AppNavHost(
         startDestination = "home"
     ) {
         composable("home") {
-            val homeViewModel: HomeViewModel = viewModel(
-                factory = HomeViewModelFactory(repository)
-            )
-            HomeScreen(
-                viewModel = homeViewModel,
+            HomeRoute(
+                repository = repository,
                 onOpenBoard = { boardId ->
                     navController.navigate("board/$boardId") {
                         // launchSingleTop гасит двойной тап по карточке: иначе в бэкстеке две одинаковые доски

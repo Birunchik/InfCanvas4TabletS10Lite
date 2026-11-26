@@ -1,23 +1,17 @@
 *.iml
 .gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+local.properties
+
+# IDE
+.idea/
 .DS_Store
-/build
+
+# Сборка: покрывает и корень, и все модули (app, core/*, feature/*, build-logic)
+build/
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-.idea/
-**/.idea/
-# Локальные каталоги Gradle/Android, если агенты изолируют их внутри workspace (см. .ai/AGENTS.md)
-/build/.gradle-home
-/build/.android-home
+
 # Obsidian: служебные данные рабочей области не версионируем
 docs/.obsidian/workspace.json
 docs/.obsidian/workspace-mobile.json

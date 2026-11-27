@@ -12,7 +12,9 @@ import androidx.room.RoomDatabase
 )
 // Схема v1 без миграций: при изменении entities нужен Migration (или явный
 // fallback), иначе Room упадёт у пользователей с уже созданной БД.
-abstract class AppDatabase : RoomDatabase() {
+// internal: снаружи модуля работают через createBoardDao(), иначе Room снова
+// протёк бы в compile classpath потребителей (требование Kotlin к супертипам).
+internal abstract class AppDatabase : RoomDatabase() {
     abstract fun boardDao(): BoardDao
 
     companion object {

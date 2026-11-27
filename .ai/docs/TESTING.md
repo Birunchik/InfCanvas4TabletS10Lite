@@ -65,6 +65,22 @@
 Перед прогоном убедись, что Gradle может писать в `~/.gradle/wrapper/dists`
 (иначе `FileNotFoundException ... .lck` — ограничение песочницы, а не проекта).
 
+## Компактный прогон для агентов
+
+`scripts/gradle-issues.ps1` запускает Gradle и печатает только проблемы (ошибки `e:`,
+проваленные задачи, падения тестов, lint-сводку, `What went wrong`), а полный лог
+складывает в `build/logs/`. Код возврата совпадает с Gradle.
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gradle-issues.ps1 testDebugUnitTest
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gradle-issues.ps1 :core:canvas:testDebugUnitTest
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gradle-issues.ps1 lintDebug
+```
+
+Несколько задач: в PowerShell 7 (`pwsh`) — `scripts/gradle-issues.ps1 lintDebug buildHealth`;
+в PowerShell 5.1 через `-File` передаётся один аргумент, поэтому используйте `pwsh` или `-Command`.
+
+
 ## Что чем тестируется (ориентир)
 
 - **Формат файла** → `core/data` `BoardFileStorageTest`: round-trip, битый magic,

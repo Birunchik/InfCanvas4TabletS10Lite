@@ -29,6 +29,47 @@ internal class CanvasRenderState {
     val eraserCandidatesBuffer = ArrayList<Stroke>(16)
     val eraserHitIdsBuffer = HashSet<Long>()
 
+    // Координаты углов рамки выделенной картинки для OverlayRenderer: listOf(Offset...)
+    // на кадр аллоцировал список и 4 Offset'а. FloatArray выровнен по [x0,y0,x1,y1,...]
+    // и переживает кадр, поэтому draw-проход пишет в него, а не создаёт объекты.
+    val imageHandleCorners = FloatArray(8)
+
+    // Отпечаток последнего отсортированного visibleStrokesBuffer: draw-фаза знает
+    // состав штрихов в кадре, и при неизменном составе сортировать заново не нужно.
+    // null — буфер ещё не сортировался (следующий кадр обязан отсортировать).
+    private var lastSortStamp: SortStamp? = null
+
+    /**
+     * Сортирует [visibleStrokesBuffer] по id, только если состав набора изменился.
+     *
+     * Порядок обхода quadtree зависит от раскладки дерева, а не от времени рисования,
+     * поэтому без сортировки штрихи меняли бы порядок наложения между кадрами.
+     * Сортировка по id восстанавливает порядок создания. Вызывается из draw-фазы,
+     * поэтому при повторном кадре с тем же набором (панорамирование без правок,
+     * перерисовка из-за invalidate) сортировка пропускается целиком — это и убирает
+     * аллокацию списка, которую создавал sortBy.
+     *
+     * Отпечаток — размер + хэши id в порядке появления. Он не ловит редкий случай
+     * «другой набор с тем же хэшем», но там нарушится только порядок наложения,
+     * а не состав: для устойчивости этого достаточно, а полная проверка вернула бы O(n).
+     */
+    fun sortVisibleStrokesIfChanged() {
+        val buffer = visibleStrokesBuffer
+        val stamp = SortStamp.of(buffer)
+        // Штрихи уже отсортированы (обход дерева часто совпадает с порядком вставки),
+        // и состав тот же — второй проход не нужен.
+        if (stamp == lastSortStamp && isSortedById(buffer)) return
+        buffer.sortBy { it.id }
+        lastSortStamp = stamp
+    }
+
+    private fun isSortedById(buffer: List<Stroke>): Boolean {
+        for (i in 1 until buffer.size) {
+            if (buffer[i - 1].id > buffer[i].id) return false
+        }
+        return true
+    }
+
     val screenDashEffect: PathEffect =
         PathEffect.dashPathEffect(floatArrayOf(14f, 10f), 0f)
 
@@ -62,3 +103,30 @@ internal fun rememberCanvasRenderState(): CanvasRenderState =
     remember { CanvasRenderState() }
 internal fun computeWorldDashIntervals(scale: Float): FloatArray =
     floatArrayOf(14f / scale, 10f / scale)
+
+/**
+ * Дешёвый отпечаток набора штрихов в кадре: count + сумма хэшей id.
+ * Не является идентификатором (коллизии возможны), но для решения
+ * «изменился ли состав набора» этого достаточно и стоит O(n) без аллокаций.
+ */
+internal class SortStamp private constructor(
+    private val count: Int,
+    private val hash: Long
+) {
+    override fun equals(other: Any?): Boolean =
+        other is SortStamp && other.count == count && other.hash == hash
+
+    override fun hashCode(): Int = 31 * count + (hash xor (hash ushr 32)).toInt()
+
+    companion object {
+        fun of(strokes: List<Stroke>): SortStamp {
+            var h = 1469598103934665603L
+            val prime = 1099511628211L
+            for (i in strokes.indices) {
+                // Смешиваем id позиционно, чтобы перестановка меняла отпечаток.
+                h = (h xor (strokes[i].id * prime)) * prime
+            }
+            return SortStamp(strokes.size, h)
+        }
+    }
+}

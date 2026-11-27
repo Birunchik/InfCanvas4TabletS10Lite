@@ -1,4 +1,4 @@
-package com.infinitecanvas.board.presentation.navigation
+package com.infinitecanvas.board
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
@@ -7,16 +7,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.IdGenerator
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import com.infinitecanvas.board.presentation.screen.board.BoardRoute
 import com.infinitecanvas.board.presentation.screen.home.HomeRoute
+import kotlinx.coroutines.CoroutineScope
 
 @Composable
 fun AppNavHost(
     repository: BoardRepository,
     thumbnailGenerator: BoardThumbnailer,
-    imageStore: ImageStore
+    imageStore: ImageStore,
+    idGenerator: IdGenerator,
+    applicationScope: CoroutineScope
 ) {
     val navController = rememberNavController()
 
@@ -47,6 +51,8 @@ fun AppNavHost(
                 repository = repository,
                 thumbnailGenerator = thumbnailGenerator,
                 imageStore = imageStore,
+                idGenerator = idGenerator,
+                applicationScope = applicationScope,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

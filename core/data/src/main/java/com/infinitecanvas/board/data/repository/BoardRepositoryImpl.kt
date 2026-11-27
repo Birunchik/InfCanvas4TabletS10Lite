@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.map
 
 // Два хранилища без общей транзакции: геометрия в файле, метаданные в Room.
 // Порядок вызовов и есть политика согласованности — менять его нельзя.
-class BoardRepositoryImpl(
+// internal: наружу отдаётся только доменный BoardRepository (см. createBoardRepository).
+internal class BoardRepositoryImpl(
     private val dao: BoardDao,
     private val fileStorage: BoardFileStorage,
     private val imageStore: ImageStore

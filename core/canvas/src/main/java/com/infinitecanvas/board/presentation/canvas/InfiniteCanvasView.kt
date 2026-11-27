@@ -49,6 +49,15 @@ fun InfiniteCanvasView(
     isZoomLocked: Boolean = false,
     allowFingerDrawing: Boolean = false,
     onCanvasViewportSizeChanged: (widthPx: Int, heightPx: Int) -> Unit,
+    /**
+     * Источник id для коммитимого штриха — обязателен намеренно.
+     *
+     * Порядок наложения штрихов держится на `id` (сортировка в draw-фазе), поэтому
+     * значения обязаны быть уникальными и монотонными. Дефолт с `System.nanoTime()`
+     * давал бы вызывающему молчаливо неверный контракт; в приложении сюда приходит
+     * генератор доски (`BoardViewModel.nextStrokeId`).
+     */
+    nextStrokeId: () -> Long,
     onStrokeCommitted: (Stroke) -> Unit,
     onEraseStrokes: (Set<Long>) -> Unit,
     onStrokesSelected: (Set<Long>) -> Unit,
@@ -77,6 +86,7 @@ fun InfiniteCanvasView(
         allowFingerDrawing = allowFingerDrawing,
         renderState = renderState,
         interactionState = interactionState,
+        nextStrokeId = nextStrokeId,
         onStrokeCommitted = onStrokeCommitted,
         onEraseStrokes = onEraseStrokes,
         onStrokesSelected = onStrokesSelected,
@@ -141,9 +151,12 @@ fun InfiniteCanvasView(
             maxY = worldBottom + abs(gestureHandler.selectionDragDy)
         )
         quadtree.query(queryBounds, renderState.visibleStrokesBuffer)
-        // Порядок наложения фиксируем по id: query обходит узлы quadtree,
-        // и без сортировки штрихи могли бы менять порядок между кадрами.
-        renderState.visibleStrokesBuffer.sortBy { it.id }
+        // Порядок наложения обязан быть стабильным между кадрами, а query обходит узлы
+        // дерева (порядок зависит от раскладки, а не от времени рисования).
+        // Сортируем здесь, но только когда состав набора изменился: sortBy на каждом
+        // кадре — это аллокация списка + O(n log n) в draw-фазе, т.е. ровно то,
+        // от чего защищает инвариант «не аллоцировать».
+        renderState.sortVisibleStrokesIfChanged()
 
         // translate + scale с pivot = Offset.Zero повторяет ViewportState.worldToScreen*:
         // менять формулы здесь нельзя, иначе штрихи разъедутся с сеткой, нарисованной в screen-space.
@@ -226,7 +239,8 @@ fun InfiniteCanvasView(
             images = images,
             selectionBounds = selectionBounds,
             selectedStrokeIds = selectedStrokeIds,
-            screenDashEffect = renderState.screenDashEffect
+            screenDashEffect = renderState.screenDashEffect,
+            imageHandleCorners = renderState.imageHandleCorners
         )
     }
 }

@@ -10,7 +10,8 @@
 ├── AGENTS.md                 ← ты здесь: правила и ловушки
 ├── docs/
 │   ├── PROJECT_MAP.md        модули, слои, граф зависимостей, «куда что класть»
-│   └── TESTING.md            чем и как тестировать
+│   ├── TESTING.md            чем и как тестировать
+│   └── MCP_KOTLIN_LSP.md     связка DSH→MCP→kotlin-lsp: что починено и как запускать
 └── skills/
     └── android-module/
         └── SKILL.md          процедуры: новая кисть / инструмент / объект / формат
@@ -23,6 +24,8 @@
 3. `.ai/docs/TESTING.md` — стек тестов и команды.
 4. Для задач «добавить кисть / инструмент / новый тип объекта / изменить формат» —
    `.ai/skills/android-module/SKILL.md`.
+5. Если работаешь через MCP-инструменты `mcp__kotlin-lsp__*` (hover/symbols/references) —
+   `.ai/docs/MCP_KOTLIN_LSP.md`.
 
 > Корневой `AGENTS.md` **намеренно отсутствует** (чтобы не мусорить), поэтому DSH
 > автоматически этот файл не подгружает. Если хочешь, чтобы правила применялись сами —
@@ -49,6 +52,13 @@
 - **Правки production-кода требуют теста в том же модуле.** Где лежат тесты — `.ai/docs/TESTING.md`.
 - **`grep`, а не догадки.** Граф зависимостей проверяй скриптом `scripts/check-module-boundaries.ps1`
   (и он же гоняется в CI), а не памятью.
+- **Gradle-вывод — через `scripts/gradle-issues.ps1`.** Он печатает только проблемы и сохраняет
+  полный лог в `build/logs/`; код возврата совпадает с Gradle. Сырой вывод `gradlew` читать
+  целиком не нужно — это сотни строк логов и предупреждений JVM.
+- **Локальные скиллы проекта** подключены через `@deepseek-ai/dsh-skill-filesystem`
+  (`.ai/skills`; на другое профильное имя смотрит `customSkillDirs` в
+  `$DSH_HOME/profiles/<profile>/cordis.patch.yml`). Новый скилл — каталог
+  `.ai/skills/<name>/SKILL.md` с frontmatter `name` + `description`.
 - **Не переименовывай пакеты** без причины: пакеты намеренно сохранены при переносе
   файлов между модулями — так history и импорты не ломаются.
 
@@ -73,9 +83,11 @@
      сохранённых файлах.
 4. Пакеты `com.infinitecanvas.board.*` — публичный контракт между модулями. **Namespace
    модуля уникален** (совпадает с его `R`-классом): импортировать чужой `R` нельзя
-   (кроме `com.infinitecanvas.designsystem.R`). Публичные сущности в `core:data` (DAO,
-   `ImageAssetStorage`, `BoardFileStorage`) — деталь реализации, которую видит только
-   `AppContainer`.
+   (кроме `com.infinitecanvas.designsystem.R`). В `core:data` деталь реализации —
+   `BoardDao`, `AppDatabase`, `BoardRepositoryImpl` (все `internal`); наружу отдаётся
+   доменный `BoardRepository` через `createBoardRepository(...)`, его и вызывает
+   `AppContainer`. `ImageAssetStorage`, `BoardFileStorage`, `ThumbnailGenerator`
+   остаются публичными — их видит только `AppContainer`.
 5. Публичный API `:core:canvas` — только `InfiniteCanvasView`, `BoardImageCache`,
    `ImageDecoder`, `computeSelectionWorldBounds`; остальное `internal`. Входы фич —
    `HomeRoute`/`BoardRoute`; ViewModel/контроллеры/HUD — детали модуля.
@@ -117,5 +129,6 @@
 на порты, затем вынесены `:core:canvas`, `:core:designsystem`, `:feature:board`,
 `:feature:home`, фикстуры — в `:core:testing`, конфигурация — в `build-logic/`.
 `:app` — только `MainActivity` + `AppContainer` + `AppNavHost`.
-Открытые долги: `api` вместо `implementation` в `core:data` (DAGP-советы не фатальны),
-размер APK/время сборки — обновлять по факту.
+Долг `api` вместо `implementation` в `core:data` закрыт: DAO и `BoardRepositoryImpl`
+теперь `internal`, наружу — `createBoardRepository(...)`; Room стал `implementation`.
+Размер APK/время сборки — обновлять по факту.

@@ -5,8 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import coil.Coil
-import com.infinitecanvas.board.di.AppContainer
-import com.infinitecanvas.board.presentation.navigation.AppNavHost
 import com.infinitecanvas.board.presentation.theme.ui.InfCanvasTheme
 
 class MainActivity : ComponentActivity() {
@@ -25,6 +23,8 @@ class MainActivity : ComponentActivity() {
                     repository = container.repository,
                     thumbnailGenerator = container.thumbnailGenerator,
                     imageStore = container.imageStore,
+                    idGenerator = container.idGenerator,
+                    applicationScope = container.applicationScope,
                 )
             }
         }

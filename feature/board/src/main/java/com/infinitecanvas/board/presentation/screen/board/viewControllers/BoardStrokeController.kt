@@ -2,6 +2,7 @@ package com.infinitecanvas.board.presentation.screen.board.viewControllers
 
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.port.IdGenerator
 import com.infinitecanvas.board.domain.spatial.Quadtree
 import com.infinitecanvas.board.presentation.canvas.computeSelectionWorldBounds
 import kotlinx.collections.immutable.PersistentList
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.stateIn
 // копию, поэтому undo дешёвый и не может испортить текущий список.
 internal class BoardStrokeController(
     scope: CoroutineScope,
+    private val idGenerator: IdGenerator,
     private val onContentChanged: () -> Unit,
     private val onSelectionActivated: () -> Unit
 ) {
@@ -53,10 +55,42 @@ internal class BoardStrokeController(
     // не использует хелпер — там арифметика +dx/+dy дешевле полного пересчёта
     // и корректна, пока bounds согласованы (а они согласованы, потому что все
     // остальные мутаторы идут через этот хелпер).
+    //
+    // Пересчёт идёт по индексу id → bounds: при 10k штрихов и клике по одному объекту
+    // полный проход по _strokes был бы O(N) на каждое выделение. Индекс инвалидируется
+    // при любой мутации списка (см. invalidateBoundsIndex), поэтому рамка не может
+    // показать старую геометрию.
     private fun recomputeSelectionBounds() {
         val ids = _selectedStrokeIds.value
-        _selectionBounds.value = if (ids.isEmpty()) null
-        else computeSelectionWorldBounds(_strokes.value, ids)
+        if (ids.isEmpty()) {
+            _selectionBounds.value = null
+            return
+        }
+        _selectionBounds.value = computeSelectionWorldBounds(ids, boundsIndex())
+    }
+
+    // null — индекс надо перестроить. Сбрасывается в true любым мутатором _strokes.
+    private var boundsIndexDirty = true
+    private var cachedBoundsById: Map<Long, WorldBounds>? = null
+
+    private fun invalidateBoundsIndex() {
+        boundsIndexDirty = true
+        cachedBoundsById = null
+    }
+
+    private fun boundsIndex(): Map<Long, WorldBounds> {
+        val cached = cachedBoundsById
+        if (!boundsIndexDirty && cached != null) return cached
+
+        val strokes = _strokes.value
+        val result = HashMap<Long, WorldBounds>(strokes.size * 2)
+        for (i in strokes.indices) {
+            val s = strokes[i]
+            result[s.id] = s.bounds
+        }
+        cachedBoundsById = result
+        boundsIndexDirty = false
+        return result
     }
 
     // История не переживает загрузку: undo вернул бы штрихи прошлой доски. Выделение
@@ -68,6 +102,7 @@ internal class BoardStrokeController(
         _selectionBounds.value = null
         val persistent = strokes.toPersistentList()
         _strokes.value = persistent
+        invalidateBoundsIndex()
         _quadtree.value = Quadtree.build(persistent)
     }
 
@@ -75,6 +110,7 @@ internal class BoardStrokeController(
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
         _strokes.value = currentList.adding(stroke)
+        invalidateBoundsIndex()
         _quadtree.value.insert(stroke)  // in-place, без эмита
         onContentChanged()
     }
@@ -87,6 +123,7 @@ internal class BoardStrokeController(
 
         pushUndoSnapshot(currentList)
         _strokes.value = filtered
+        invalidateBoundsIndex()
         idsToRemove.forEach { _quadtree.value.remove(it) }
 
         val selected = _selectedStrokeIds.value
@@ -120,6 +157,7 @@ internal class BoardStrokeController(
         if (filtered.size != currentList.size) {
             pushUndoSnapshot(currentList)
             _strokes.value = filtered
+            invalidateBoundsIndex()
             ids.forEach { _quadtree.value.remove(it) }
             onContentChanged()
         }
@@ -145,6 +183,11 @@ internal class BoardStrokeController(
                 } else stroke
             }
             .toPersistentList()
+
+        // bounds перемещённых штрихов изменились — индекс id → bounds больше не валиден.
+        // Следующий recomputeSelectionBounds (после драга) обязан пересобрать его,
+        // иначе рамка выделения считалась бы по старой геометрии.
+        invalidateBoundsIndex()
 
         ids.forEach { _quadtree.value.remove(it) }
         movedStrokes.forEach { _quadtree.value.insert(it) }
@@ -174,25 +217,26 @@ internal class BoardStrokeController(
         }
     }
 
-    // id = nanoTime + index: нужна глобальная уникальность, иначе повторная вставка
-    // дала бы дубликаты. pasteCascadeCount даёт каскадный сдвиг по 28 px.
+    // id берётся у генератора: nanoTime давал значения, не связанные с порядком
+    // создания (на нём держится порядок наложения) и не гарантировал уникальность.
+    // Каскадный сдвиг по 28 px сохранён.
     fun pasteClipboardStrokes() {
         val clipboard = _clipboardStrokes.value
         if (clipboard.isEmpty()) return
 
         pasteCascadeCount++
         val offsetStep = 28.0 * pasteCascadeCount
-        val baseId = System.nanoTime()
 
-        val pastedStrokes = clipboard.mapIndexed { index, stroke ->
+        val pastedStrokes = clipboard.map { stroke ->
             stroke
                 .translated(offsetStep, offsetStep)
-                .copy(id = baseId + index + 1L)
+                .copy(id = idGenerator.next())
         }
 
         val currentList = _strokes.value
         pushUndoSnapshot(currentList)
         _strokes.value = currentList.addingAll(pastedStrokes)
+        invalidateBoundsIndex()
         pastedStrokes.forEach { _quadtree.value.insert(it) }
 
         val newIds = pastedStrokes.mapTo(HashSet(pastedStrokes.size)) { it.id }
@@ -208,6 +252,7 @@ internal class BoardStrokeController(
         if (undoStack.isEmpty()) return
         val previous = undoStack.removeLast()
         _strokes.value = previous
+        invalidateBoundsIndex()
         // Полная пересборка: O(N log N), ~2–5 ms для 10k штрихов.
         _quadtree.value = Quadtree.build(previous)
         _canUndo.value = undoStack.isNotEmpty()

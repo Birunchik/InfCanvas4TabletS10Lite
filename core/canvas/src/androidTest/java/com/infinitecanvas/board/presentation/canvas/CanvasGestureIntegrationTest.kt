@@ -68,6 +68,10 @@ class CanvasGestureIntegrationTest {
     private lateinit var imageCache: BoardImageCache
     private val viewport = ViewportState()
 
+    // Детерминированные id для коммитов: nanoTime в тестах дал бы неповторяемый
+    // порядок наложения, а тесты проверяют именно поведение, не удачу.
+    private val testIdCounter = java.util.concurrent.atomic.AtomicLong(0L)
+
     @Before
     fun setUp() {
         imageCacheScope = CoroutineScope(Dispatchers.Main)
@@ -114,6 +118,7 @@ class CanvasGestureIntegrationTest {
             isZoomLocked = isZoomLocked,
             allowFingerDrawing = allowFingerDrawing,
             onCanvasViewportSizeChanged = { _, _ -> },
+            nextStrokeId = { testIdCounter.incrementAndGet() },
             onStrokeCommitted = onStrokeCommitted,
             onEraseStrokes = onEraseStrokes,
             onStrokesSelected = onStrokesSelected,

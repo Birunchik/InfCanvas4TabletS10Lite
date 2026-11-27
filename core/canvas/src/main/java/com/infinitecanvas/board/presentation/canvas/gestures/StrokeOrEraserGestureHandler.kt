@@ -31,6 +31,7 @@ internal class StrokeOrEraserGestureHandler(
     private val stylusManager: StylusButtonManager,
     private val interactionState: CanvasInteractionState,
     private val isZoomLocked: () -> Boolean,
+    private val nextStrokeId: () -> Long,
     private val onStrokeCommitted: (Stroke) -> Unit,
     private val onEraseStrokes: (Set<Long>) -> Unit,
     private val onImageSelected: (Long?) -> Unit,
@@ -99,7 +100,7 @@ internal class StrokeOrEraserGestureHandler(
                 }
 
                 if ((isStylusOrEraser || isSingleFingerAllowed) && !isErasingNow && activePoints.isNotEmpty()) {
-                    val committed = Stroke.create(System.nanoTime(), activePoints.toList(), activeBrush())
+                    val committed = Stroke.create(nextStrokeId(), activePoints.toList(), activeBrush())
                     pathCache.getOrBuild(committed)
                     onStrokeCommitted(committed)
                 }
@@ -127,7 +128,7 @@ internal class StrokeOrEraserGestureHandler(
                 if (isStylusOrEraser || isSingleFingerAllowed) {
                     if (shouldEraseOnThisEvent && !isErasingNow) {
                         if (activePoints.size > 1) {
-                            val committed = Stroke.create(System.nanoTime(), activePoints.toList(), activeBrush())
+                            val committed = Stroke.create(nextStrokeId(), activePoints.toList(), activeBrush())
                             pathCache.getOrBuild(committed)
                             onStrokeCommitted(committed)
                         }

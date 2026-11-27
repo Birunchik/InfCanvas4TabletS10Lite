@@ -41,3 +41,39 @@ fun computeSelectionWorldBounds(
         maxY = maxY + SELECTION_PADDING
     )
 }
+
+/**
+ * Вариант для уже построенного индекса id → bounds.
+ *
+ * Смысл — не перебирать весь список штрихов: сложность зависит от числа ВЫДЕЛЕННЫХ
+ * объектов, а не от общего размера доски. При 10k штрихов и клике по одному объекту
+ * list-версия делала 10k итераций, эта — одну.
+ */
+fun computeSelectionWorldBounds(
+    selectedIds: Set<Long>,
+    boundsById: Map<Long, WorldBounds>
+): WorldBounds? {
+    if (selectedIds.isEmpty()) return null
+
+    var minX = Double.POSITIVE_INFINITY
+    var minY = Double.POSITIVE_INFINITY
+    var maxX = Double.NEGATIVE_INFINITY
+    var maxY = Double.NEGATIVE_INFINITY
+    var found = false
+
+    for (id in selectedIds) {
+        val b = boundsById[id] ?: continue
+        if (b.minX < minX) minX = b.minX
+        if (b.minY < minY) minY = b.minY
+        if (b.maxX > maxX) maxX = b.maxX
+        if (b.maxY > maxY) maxY = b.maxY
+        found = true
+    }
+    if (!found) return null
+    return WorldBounds(
+        minX = minX - SELECTION_PADDING,
+        minY = minY - SELECTION_PADDING,
+        maxX = maxX + SELECTION_PADDING,
+        maxY = maxY + SELECTION_PADDING
+    )
+}

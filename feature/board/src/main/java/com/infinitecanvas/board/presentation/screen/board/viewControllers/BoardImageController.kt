@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import com.infinitecanvas.board.domain.model.BoardImage
 import com.infinitecanvas.board.domain.model.WorldBounds
+import com.infinitecanvas.board.domain.port.IdGenerator
 import com.infinitecanvas.board.domain.port.ImageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ import kotlin.math.min
 internal class BoardImageController(
     private val imageStore: ImageStore,
     private val scope: CoroutineScope,
+    private val idGenerator: IdGenerator,
     private val viewportController: BoardViewportController,
     private val onContentChanged: () -> Unit,
     private val onSelectionActivated: () -> Unit
@@ -127,7 +129,7 @@ internal class BoardImageController(
             val worldH = (imported.heightPx * scaleFactor) / vp.scale.coerceAtLeast(0.15)
 
             val newImage = BoardImage(
-                id = System.nanoTime(),
+                id = idGenerator.next(),
                 fileName = imported.fileName,
                 bounds = WorldBounds(
                     minX = centerWorldX - worldW * 0.5,

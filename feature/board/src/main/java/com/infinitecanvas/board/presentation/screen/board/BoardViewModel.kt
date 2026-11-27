@@ -8,6 +8,7 @@ import com.infinitecanvas.board.domain.model.BrushType
 import com.infinitecanvas.board.domain.model.Stroke
 import com.infinitecanvas.board.domain.model.WorldBounds
 import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.IdGenerator
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardImageController
@@ -16,6 +17,7 @@ import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardT
 import com.infinitecanvas.board.presentation.screen.board.viewControllers.BoardViewportController
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -27,8 +29,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+
+// Дебаунс автосохранения: пауза тишины после последней правки.
+private val AUTO_SAVE_DEBOUNCE = 1_500L.milliseconds
 
 // Контроллеры — единственный источник состояния; ViewModel не держит копий
 // штрихов/картинок и лишь связывает их колбэками, поэтому flush читает их снапшоты.
@@ -36,6 +43,12 @@ internal class BoardViewModel(
     private val repository: BoardRepository,
     private val thumbnailGenerator: BoardThumbnailer,
     imageStore: ImageStore,
+    // Единственный источник id для штрихов/картинок. Сидируется при загрузке доски,
+    // чтобы новые id шли после сохранённых (уникальность в пределах доски).
+    private val idGenerator: IdGenerator,
+    // Scope уровня приложения: переживает ViewModel, поэтому финальная запись
+    // в onCleared может реально выполниться (viewModelScope к этому моменту отменён).
+    private val applicationScope: CoroutineScope,
     // Дефолт Main.immediate сохраняет прежнее поведение: viewModelScope и так
     // работает на Main. Тесты передают StandardTestDispatcher, чтобы управлять
     // delay/дебаунсом виртуальным временем.
@@ -43,9 +56,14 @@ internal class BoardViewModel(
 ) : ViewModel() {
 
     private var currentBoardId: Long? = null
-    // Один активный Job на все правки: scheduleAutoSave отменяет предыдущий,
+    // Один активный таймер на все правки: scheduleAutoSave отменяет предыдущий,
     // то есть это дебаунс, а не очередь последовательных записей.
-    private var autoSaveJob: Job? = null
+    // Отменяется только фаза delay — сама запись идёт в NonCancellable.
+    private var saveTimerJob: Job? = null
+    // Запрос «перегенерировать превью» переживает схлопывание нескольких правок в один таймер.
+    private var pendingThumbnailRequest: Boolean = false
+    // Сериализует записи: таймер может сработать, пока предыдущая запись ещё идёт.
+    private val saveMutex = Mutex()
     private var hasUnsavedChanges: Boolean = false
 
     // Guard от повторного openBoard той же доски: пока идёт загрузка,
@@ -66,6 +84,7 @@ internal class BoardViewModel(
 
     private val strokeController: BoardStrokeController = BoardStrokeController(
         scope = viewModelScope,
+        idGenerator = idGenerator,
         onContentChanged = { scheduleAutoSave(regenerateThumbnail = true) },
         onSelectionActivated = { imageController.clearSelection() }
     )
@@ -73,6 +92,7 @@ internal class BoardViewModel(
     private val imageController: BoardImageController = BoardImageController(
         imageStore = imageStore,
         scope = viewModelScope,
+        idGenerator = idGenerator,
         viewportController = viewportController,
         onContentChanged = { scheduleAutoSave(regenerateThumbnail = true) },
         onSelectionActivated = { strokeController.clearSelection() }
@@ -123,6 +143,16 @@ internal class BoardViewModel(
             val doc = repository.loadBoard(boardId)
             if (doc != null) {
                 currentBoardId = boardId
+                // Сидим генератор id после загрузки: в файле уже лежат id штрихов
+                // и картинок, и новые обязаны идти после них. Делаем это ДО setInitial*,
+                // чтобы ни один новый объект не успел получить занятый id.
+                // seedAtLeast монотонен, поэтому повторное открытие доски безопасно.
+                idGenerator.seedAtLeast(
+                    maxOf(
+                        doc.strokes.maxOfOrNull { it.id } ?: 0L,
+                        doc.images.maxOfOrNull { it.id } ?: 0L
+                    )
+                )
                 strokeController.setInitialStrokes(doc.strokes)
                 imageController.setInitialImages(doc.images)
                 viewportController.setViewport(doc.viewport)
@@ -132,8 +162,8 @@ internal class BoardViewModel(
         }
     }
 
-    // Снапшоты снимаются до launch: пока идёт запись, пользователь может рисовать,
-    // а сохраняться должно состояние на момент выхода.
+    // Снапшоты снимает persist() в момент записи; flush лишь гарантирует, что
+    // запись не будет отменена и не наложится на автосейв.
     fun flushSaveAndThumbnail(onFinished: (() -> Unit)? = null) {
         val boardId = currentBoardId ?: run {
             onFinished?.invoke()
@@ -150,61 +180,74 @@ internal class BoardViewModel(
 
         // Отменяем отложенный автосейв: иначе после flush сработает ещё одна запись
         // той же доски, и порядок «кто последний» станет неопределённым.
-        autoSaveJob?.cancel()
-        val strokesSnapshot = strokes.value
-        val imagesSnapshot = images.value
-        val viewportSnapshot = viewportState.value
+        // Отмена безопасна: если автосейв уже пишет, его тело в NonCancellable,
+        // а общий saveMutex не даст записям наложиться.
+        saveTimerJob?.cancel()
 
         viewModelScope.launch(dispatcher) {
             // NonCancellable: отмена scope (onCleared) не должна оборвать запись на середине —
             // файл и строка Room пишутся без общей транзакции, и половина хуже отсутствия.
             withContext(NonCancellable) {
-                val thumbPath = thumbnailGenerator.generateAndSave(
-                    boardId = boardId,
-                    strokes = strokesSnapshot,
-                    images = imagesSnapshot
-                )
-                repository.saveBoardContent(
-                    boardId = boardId,
-                    strokes = strokesSnapshot,
-                    images = imagesSnapshot,
-                    viewport = viewportSnapshot,
-                    thumbnailPath = thumbPath
-                )
-                hasUnsavedChanges = false
+                // saveMutex: flush не должен наложиться на идущий автосейв.
+                saveMutex.withLock {
+                    persist(boardId = boardId, regenerateThumbnail = true)
+                }
             }
             onFinished?.invoke()
         }
     }
 
+    // Единственная точка записи доски. Снимки снимаются здесь, поэтому вызывающий
+    // может менять состояние параллельно. Вызывается под saveMutex: две записи
+    // не должны накладываться на один файл.
+    private suspend fun persist(boardId: Long, regenerateThumbnail: Boolean) {
+        val strokesSnapshot = strokes.value
+        val imagesSnapshot = images.value
+        val viewportSnapshot = viewportState.value
+        val thumbPath = if (regenerateThumbnail) {
+            thumbnailGenerator.generateAndSave(
+                boardId = boardId,
+                strokes = strokesSnapshot,
+                images = imagesSnapshot
+            )
+        } else {
+            null
+        }
+        repository.saveBoardContent(
+            boardId = boardId,
+            strokes = strokesSnapshot,
+            images = imagesSnapshot,
+            viewport = viewportSnapshot,
+            thumbnailPath = thumbPath
+        )
+        hasUnsavedChanges = false
+    }
+
     // Дебаунс 1.5 с: таймер перезапускается на каждое изменение. Миниатюра — только
     // при контентных правках: пан/зум меняют лишь viewport и её не требуют.
+    //
+    // Запись обёрнута в NonCancellable и сериализована мьютексом. Причина: пан/зум
+    // вызывает scheduleAutoSave на каждое движение пальца, то есть таймер отменяется
+    // десятки раз в секунду. Без NonCancellable cancel() мог попасть В СЕРЕДИНУ записи
+    // (файл уже записан, строка Room ещё нет) — и повторить ту рассинхронизацию,
+    // от которой защищает порядок вызовов в BoardRepositoryImpl.
     private fun scheduleAutoSave(regenerateThumbnail: Boolean) {
         val boardId = currentBoardId ?: return
         hasUnsavedChanges = true
-        autoSaveJob?.cancel()
-        autoSaveJob = viewModelScope.launch(dispatcher) {
-            delay(1_500L.milliseconds)
-            val strokesSnapshot = strokes.value
-            val imagesSnapshot = images.value
-            val viewportSnapshot = viewportState.value
-            val thumbPath = if (regenerateThumbnail) {
-                thumbnailGenerator.generateAndSave(
-                    boardId = boardId,
-                    strokes = strokesSnapshot,
-                    images = imagesSnapshot
-                )
-            } else {
-                null
+        // Запрос на миниатюру не должен теряться при схлопывании нескольких правок.
+        pendingThumbnailRequest = pendingThumbnailRequest || regenerateThumbnail
+        saveTimerJob?.cancel()
+        saveTimerJob = viewModelScope.launch(dispatcher) {
+            delay(AUTO_SAVE_DEBOUNCE)
+            val wantThumbnail = pendingThumbnailRequest
+            pendingThumbnailRequest = false
+            // NonCancellable: отмена таймера не должна оборвать уже начатую запись.
+            // Mutex: две записи не должны накладываться на один файл.
+            withContext(NonCancellable) {
+                saveMutex.withLock {
+                    persist(boardId = boardId, regenerateThumbnail = wantThumbnail)
+                }
             }
-            repository.saveBoardContent(
-                boardId = boardId,
-                strokes = strokesSnapshot,
-                images = imagesSnapshot,
-                viewport = viewportSnapshot,
-                thumbnailPath = thumbPath
-            )
-            hasUnsavedChanges = false
         }
     }
 
@@ -220,6 +263,15 @@ internal class BoardViewModel(
 
     fun toggleZoomLock() = viewportController.toggleZoomLock()
     fun resetViewport() = viewportController.resetViewport()
+
+    /**
+     * Выдаёт id для штриха, который сейчас рисуется на холсте.
+     *
+     * Холст создаёт штрих в момент коммита (см. InfiniteCanvasView.nextStrokeId),
+     * поэтому id обязан приходить отсюда: только ViewModel знает генератор,
+     * засиженный под текущую доску.
+     */
+    fun nextStrokeId(): Long = idGenerator.next()
 
     fun createTempCameraFile(): File = imageController.createTempCameraFile()
     // boardId может прийти раньше openBoard (камера/галерея на старте), поэтому
@@ -267,12 +319,21 @@ internal class BoardViewModel(
     }
 
     @SuppressLint("EmptySuperCall")
-    // Этот flush уже не сработает: viewModelScope отменяется до onCleared, и launch
-    // внутри не выполнится. Надёжное сохранение — только явный выход через handleExit.
+    // Финальное сохранение при уничтожении ViewModel.
+    //
+    // Раньше здесь вызывался flushSaveAndThumbnail(), но он запускался в viewModelScope,
+    // а тот отменяется ДО onCleared — ветка была мёртвой и создавала ложное чувство
+    // защиты. Теперь запись идёт в scope приложения (переживает ViewModel).
+    // Условия пропуска: сохранённого доски нет, изменений нет, либо выход уже
+    // начат через handleExit (тогда flush выполняется/выполнился отдельно).
     override fun onCleared() {
         super.onCleared()
-        if (hasUnsavedChanges) {
-            flushSaveAndThumbnail()
+        val boardId = currentBoardId
+        if (boardId == null || !hasUnsavedChanges || isExiting) return
+        applicationScope.launch {
+            saveMutex.withLock {
+                persist(boardId = boardId, regenerateThumbnail = true)
+            }
         }
     }
 }

@@ -81,6 +81,73 @@ class SelectionBoundsTest {
         assertEquals(original, s.bounds)
     }
 
+    // ---- map-вариант: обязан давать побитово тот же результат, что list-вариант ----
+
+    private fun mapOf(vararg strokes: Pair<Long, WorldBounds>): Map<Long, WorldBounds> =
+        strokes.toMap()
+
+    @Test
+    fun `map variant is null for empty selection`() {
+        assertNull(computeSelectionWorldBounds(emptySet(), mapOf(1L to WorldBounds(0.0, 0.0, 1.0, 1.0))))
+    }
+
+    @Test
+    fun `map variant is null when no id is present`() {
+        assertNull(computeSelectionWorldBounds(setOf(999L), mapOf(1L to WorldBounds(0.0, 0.0, 1.0, 1.0))))
+    }
+
+    @Test
+    fun `map variant matches list variant for single stroke`() {
+        val b = WorldBounds(10.0, 20.0, 110.0, 120.0)
+        val s = StrokeFixtures.stroke(1L, b)
+
+        val fromList = computeSelectionWorldBounds(listOf(s), setOf(1L))
+        val fromMap = computeSelectionWorldBounds(setOf(1L), mapOf(1L to b))
+
+        assertEquals(fromList, fromMap)
+    }
+
+    @Test
+    fun `map variant matches list variant for multiple strokes`() {
+        val b1 = WorldBounds(0.0, 0.0, 50.0, 50.0)
+        val b2 = WorldBounds(-30.0, 10.0, 200.0, 80.0)
+        val b3 = WorldBounds(500.0, 500.0, 600.0, 600.0)
+        val strokes = listOf(
+            StrokeFixtures.stroke(1L, b1),
+            StrokeFixtures.stroke(2L, b2),
+            StrokeFixtures.stroke(3L, b3)
+        )
+        val selection = setOf(1L, 2L)
+
+        val fromList = computeSelectionWorldBounds(strokes, selection)
+        val fromMap = computeSelectionWorldBounds(selection, mapOf(1L to b1, 2L to b2, 3L to b3))
+
+        assertEquals(fromList, fromMap)
+        // и результат не зависит от порядка id в наборе
+        assertEquals(fromList, computeSelectionWorldBounds(setOf(2L, 1L), mapOf(1L to b1, 2L to b2, 3L to b3)))
+    }
+
+    @Test
+    fun `map variant ignores ids missing from the index`() {
+        val b = WorldBounds(0.0, 0.0, 10.0, 10.0)
+        val result = computeSelectionWorldBounds(setOf(1L, 404L), mapOf(1L to b))!!
+        assertEquals(-8.0, result.minX, EPS)
+        assertEquals(18.0, result.maxX, EPS)
+    }
+
+    @Test
+    fun `map variant does not depend on how many strokes exist outside selection`() {
+        // Смысл правки: стоимость зависит от размера выделения, а не доски.
+        // Здесь проверяем эквивалентность результата при большом индексе.
+        val bigIndex = HashMap<Long, WorldBounds>()
+        for (i in 1L..10_000L) {
+            bigIndex[i] = WorldBounds(i.toDouble(), i.toDouble(), i + 1.0, i + 1.0)
+        }
+        val result = computeSelectionWorldBounds(setOf(5_000L), bigIndex)!!
+        assertEquals(5_000.0 - 8.0, result.minX, EPS)
+        assertEquals(5_001.0 + 8.0, result.maxX, EPS)
+    }
+
     private companion object {
         const val EPS = 1e-6
     }

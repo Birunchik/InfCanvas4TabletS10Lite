@@ -24,11 +24,17 @@ kover {
 }
 
 dependencies {
+    // domain остаётся api: публичные типы core:data реализуют его интерфейсы
+    // (BoardRepositoryImpl : BoardRepository), и потребителю они нужны.
     api(project(":core:domain"))
 
-    api(libs.androidx.room.runtime)
-    api(libs.androidx.room.common)
-    api(libs.androidx.room.ktx)
+    // Room — implementation: снаружи модуля его типы не используются. DAO и
+    // BoardRepositoryImpl internal, наружу отдаётся только доменный BoardRepository
+    // через createBoardRepository(), поэтому Room не протекает в classpath.
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.common)
+    // room-ktx не подключаем: с Room 2.7 Flow/suspend-поддержка переехала в room-runtime,
+    // а Dependency Analysis помечал room-ktx как неиспользуемую зависимость.
     ksp(libs.room.compiler)
 
     implementation(libs.androidx.exifinterface)

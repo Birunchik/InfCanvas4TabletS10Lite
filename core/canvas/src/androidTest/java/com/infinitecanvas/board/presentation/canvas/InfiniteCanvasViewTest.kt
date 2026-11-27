@@ -61,6 +61,10 @@ class InfiniteCanvasViewTest {
         quadtree = Quadtree.build(emptyList())
     }
 
+    // Сквозной счётчик id для коммитов: в тестах нужна детерминированность,
+    // поэтому nanoTime не используем (см. IdGenerator в domain).
+    private val testIdCounter = java.util.concurrent.atomic.AtomicLong(0L)
+
     @After
     fun tearDown() {
         imageCacheScope.cancel()
@@ -94,6 +98,7 @@ class InfiniteCanvasViewTest {
             selectedStrokeIds = emptySet(),
             selectionBounds = null,
             onCanvasViewportSizeChanged = onCanvasViewportSizeChanged,
+            nextStrokeId = { testIdCounter.incrementAndGet() },
             onStrokeCommitted = onStrokeCommitted,
             onEraseStrokes = onEraseStrokes,
             onStrokesSelected = {},

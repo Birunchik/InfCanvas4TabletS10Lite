@@ -34,6 +34,7 @@ internal fun rememberCanvasGestureHandler(
     allowFingerDrawing: Boolean,
     renderState: CanvasRenderState,
     interactionState: CanvasInteractionState,
+    nextStrokeId: () -> Long,
     onStrokeCommitted: (Stroke) -> Unit,
     onEraseStrokes: (Set<Long>) -> Unit,
     onStrokesSelected: (Set<Long>) -> Unit,
@@ -54,6 +55,10 @@ internal fun rememberCanvasGestureHandler(
     val currentQuadtree by rememberUpdatedState(quadtree)
     val currentIsZoomLocked by rememberUpdatedState(isZoomLocked)
     val currentAllowFinger by rememberUpdatedState(allowFingerDrawing)
+
+    // rememberUpdatedState: генератор id приходит из ViewModel и теоретически может
+    // смениться; handler создаётся один раз, поэтому читаем актуальную ссылку.
+    val currentNextStrokeId by rememberUpdatedState(nextStrokeId)
 
     val currentOnCommit by rememberUpdatedState(onStrokeCommitted)
     // Обёртка чистит pathCache до вызова ViewModel: удалённый штрих не должен остаться
@@ -82,6 +87,7 @@ internal fun rememberCanvasGestureHandler(
             quadtree = { currentQuadtree },
             isZoomLocked = { currentIsZoomLocked },
             allowFingerDrawing = { currentAllowFinger },
+            nextStrokeId = { currentNextStrokeId() },
             onStrokeCommitted = currentOnCommit,
             onEraseStrokes = currentOnErase,
             onStrokesSelected = currentOnSelect,

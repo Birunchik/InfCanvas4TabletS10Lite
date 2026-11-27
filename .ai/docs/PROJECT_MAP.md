@@ -40,7 +40,11 @@ test-only: modules ──> :core:testing ──> :core:domain
 - `:app` нужен `:core:data` только для `AppContainer`; больше никто в data не ходит.
 - `:feature:*` не зависят от `:core:data` и друг от друга.
 - `:core:canvas` не зависит от data/экранов/фич.
-- В `:core:data` Room исторически подключён через `api` (долг: DAGP советует `implementation`).
+- В `:core:data` **Room подключён через `implementation`** (долг закрыт). Чтобы это
+  стало возможно, DAO и `BoardRepositoryImpl` объявлены `internal`, а наружу отдаётся
+  доменный `BoardRepository` через `createBoardRepository(context, fileStorage, imageStore)`.
+  Публичный Room-аннотированный тип вынуждал бы держать Room в `api` (Kotlin требует
+  супертипы на compile classpath), и DAGP это подтверждал советом `api`.
 
 **Правило проверки:** `pwsh scripts/check-module-boundaries.ps1` (exit 1 при нарушении:
 запрещённые project-зависимости, импорты слоёв, чужие `R`, дубли namespace).

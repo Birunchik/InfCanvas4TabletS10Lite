@@ -61,6 +61,7 @@ internal fun CanvasLayer(
         // иначе ладонь оставляла бы штрихи при работе пером.
         allowFingerDrawing = false,
         onCanvasViewportSizeChanged = viewModel::updateCanvasViewportSize,
+        nextStrokeId = viewModel::nextStrokeId,
         onStrokeCommitted = viewModel::onStrokeCommitted,
         onEraseStrokes = viewModel::eraseStrokesByIds,
         onStrokesSelected = viewModel::selectStrokes,

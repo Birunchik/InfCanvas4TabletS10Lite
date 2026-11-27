@@ -1,16 +1,20 @@
-package com.infinitecanvas.board.di
+package com.infinitecanvas.board
 
 import android.content.Context
 import coil.ImageLoader
 import coil.memory.MemoryCache
-import com.infinitecanvas.board.data.local.db.AppDatabase
+import com.infinitecanvas.board.data.local.id.AtomicLongIdGenerator
 import com.infinitecanvas.board.data.local.storage.BoardFileStorage
 import com.infinitecanvas.board.data.local.storage.ImageAssetStorage
 import com.infinitecanvas.board.data.local.storage.ThumbnailGenerator
-import com.infinitecanvas.board.data.repository.BoardRepositoryImpl
+import com.infinitecanvas.board.data.repository.createBoardRepository
 import com.infinitecanvas.board.domain.port.BoardThumbnailer
+import com.infinitecanvas.board.domain.port.IdGenerator
 import com.infinitecanvas.board.domain.port.ImageStore
 import com.infinitecanvas.board.domain.repository.BoardRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Ручной composition root. Пока живёт в app; в Phase 1+ переедет рядом с App,
@@ -34,7 +38,15 @@ class AppContainer(context: Context) {
 
     // Room хранит только метаданные, геометрия — в файлах (BoardFileStorage):
     // согласованность этих двух хранилищ обеспечивает репозиторий, не Room.
-    private val database: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
+    // Сборка репозитория — через фабрику: DAO/BoardRepositoryImpl и Room остаются
+    // деталью реализации core:data и не протекают в classpath :app.
+    val repository: BoardRepository by lazy {
+        createBoardRepository(
+            context = appContext,
+            fileStorage = fileStorage,
+            imageStore = imageAssetStorage,
+        )
+    }
 
     private val fileStorage: BoardFileStorage by lazy { BoardFileStorage(appContext) }
 
@@ -42,15 +54,17 @@ class AppContainer(context: Context) {
 
     val imageStore: ImageStore get() = imageAssetStorage
 
+    // Единственный генератор id на приложение. Сидируется при загрузке доски
+    // (см. BoardViewModel.openBoard), поэтому новые id всегда идут после уже
+    // сохранённых — уникальность в пределах доски.
+    val idGenerator: IdGenerator by lazy { AtomicLongIdGenerator() }
+
+    // Scope уровня приложения: переживает ViewModel и Activity, нужен для записи
+    // при уничтожении ViewModel (onCleared), когда viewModelScope уже отменён.
+    val applicationScope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     val thumbnailGenerator: BoardThumbnailer by lazy {
         ThumbnailGenerator(fileStorage = fileStorage, imageStore = imageAssetStorage)
-    }
-
-    val repository: BoardRepository by lazy {
-        BoardRepositoryImpl(
-            dao = database.boardDao(),
-            fileStorage = fileStorage,
-            imageStore = imageAssetStorage,
-        )
     }
 }

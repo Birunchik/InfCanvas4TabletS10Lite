@@ -6,7 +6,10 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface BoardDao {
+// internal: DAO — деталь реализации core:data. Публичный Room-аннотированный тип
+// вынуждал бы держать room-runtime в api и протекать во все модули.
+// Снаружи модуля репозиторий создаётся через createBoardRepository().
+internal interface BoardDao {
     // --- Папки ---
     // Сортировка: sort_order (поле для ручного порядка), затем created_at.
     // Имя не участвует — переименование не должно переставлять папки.
